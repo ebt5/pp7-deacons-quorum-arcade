@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NBA JAM — Tournament Edition</title>
+<style>
+  :root {
+    --cab: #1a0a0c;
+    --cab-edge: #3a1218;
+    --neon: #ff2a2a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: radial-gradient(ellipse at 50% 20%, #2a1014 0%, #070306 70%);
+    color: #ffe8c8;
+    font-family: "Press Start 2P", "Courier New", monospace;
+    overflow: hidden;
+  }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100%;
+  }
+  .cabinet {
+    width: min(1100px, 96vw);
+    background: linear-gradient(180deg, #4a1820 0%, #1c070a 18%, #120508 100%);
+    border: 6px solid #5a1c24;
+    border-radius: 18px 18px 10px 10px;
+    box-shadow: 0 0 0 4px #2a0a10, 0 30px 80px rgba(0,0,0,.7), inset 0 0 40px rgba(0,0,0,.5);
+    padding: 14px 16px 18px;
+  }
+  .marquee {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #0b0506;
+    border: 3px solid #6a2028;
+    border-radius: 8px;
+    padding: 8px 14px;
+    margin-bottom: 10px;
+    box-shadow: inset 0 0 18px rgba(255,40,40,.25);
+  }
+  .logo {
+    font-weight: 900;
+    letter-spacing: 2px;
+    font-size: clamp(22px, 4vw, 42px);
+    color: #ffd23a;
+    text-shadow: 0 0 8px #ff6a00, 0 0 18px #ff2200, 3px 3px 0 #7a1800;
+  }
+  .logo span { color: #39ff6a; text-shadow: 0 0 8px #0f8, 3px 3px 0 #064; }
+  .sub {
+    font-size: 10px;
+    color: #ff5a3a;
+    letter-spacing: 3px;
+    text-align: center;
+    margin-top: 2px;
+  }
+  .badge {
+    width: 46px; height: 46px;
+    border: 2px solid #fff;
+    background: #111;
+    display: grid; place-items: center;
+    font-size: 9px; color: #fff;
+    box-shadow: 0 0 10px #f33;
+  }
+  .screen-wrap {
+    position: relative;
+    background: #000;
+    border: 8px solid #2a1014;
+    border-radius: 6px;
+    box-shadow: inset 0 0 30px rgba(0,255,180,.08), 0 0 24px rgba(255,60,40,.25);
+    overflow: hidden;
+  }
+  canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #061018; }
+  .crt {
+    pointer-events: none;
+    position: absolute; inset: 0;
+    background:
+      repeating-linear-gradient(to bottom, rgba(0,0,0,.18) 0 1px, transparent 1px 3px);
+    mix-blend-mode: multiply;
+    box-shadow: inset 0 0 80px rgba(0,0,0,.45);
+  }
+  .crt::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,.45) 100%);
+  }
+  .controls {
+    display: flex; justify-content: space-between; gap: 12px;
+    margin-top: 12px; font-size: 10px; line-height: 1.6; color: #f3c9a0;
+  }
+  .panel {
+    flex: 1;
+    background: #14080a;
+    border: 2px solid #5a2028;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .panel b { color: #ffd23a; }
+  .buttons {
+    display: flex; gap: 10px; align-items: center; justify-content: center;
+    margin-top: 10px;
+  }
+  button.joy {
+    width: 42px; height: 42px; border-radius: 50%;
+    border: 3px solid #4a1016;
+    background: radial-gradient(circle at 40% 35%, #ff4a4a, #8a1018);
+    box-shadow: 0 4px 0 #3a080c, inset 0 2px 4px rgba(255,255,255,.3);
+    cursor: pointer;
+  }
+  button.ball {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 3px solid #222;
+    background: radial-gradient(circle at 35% 30%, #ffe07a, #e07a10 55%, #5a2208);
+  }
+  .hint { text-align: center; font-size: 10px; color: #c9a07a; margin-top: 8px; letter-spacing: 1px; }
+  kbd {
+    background: #2a1216; border: 1px solid #a05040; border-bottom-width: 2px;
+    padding: 1px 5px; border-radius: 3px; color: #fff;
+  }
+</style>
+</head>
+<body>
+<div class="cabinet">
+  <div class="marquee">
+    <div class="badge">NBA</div>
+    <div style="text-align:center">
+      <div class="logo">NBA <span>JAM</span></div>
+      <div class="sub">TOURNAMENT EDITION</div>
+    </div>
+    <div class="badge" style="box-shadow:0 0 10px #fa0">🔥</div>
+  </div>
+  <div class="screen-wrap">
+    <canvas id="game" width="960" height="540"></canvas>
+    <div class="crt"></div>
+  </div>
+  <div class="controls">
+    <div class="panel"><b>P1 MICHAEL JORDAN</b><br>Move <kbd>A</kbd><kbd>D</kbd> &nbsp; Jump <kbd>W</kbd><br>Shoot / steal <kbd>S</kbd> &nbsp; Turbo <kbd>Shift</kbd></div>
+    <div class="panel"><b>P2 LEBRON JAMES</b><br>Move <kbd>←</kbd><kbd>→</kbd> &nbsp; Jump <kbd>↑</kbd><br>Shoot / steal <kbd>↓</kbd> &nbsp; Turbo <kbd>Enter</kbd><br>CPU if no keys pressed</div>
+  </div>
+  <div class="buttons">
+    <button class="joy" aria-label="button"></button>
+    <button class="joy" aria-label="button"></button>
+    <button class="ball" aria-label="ball"></button>
+  </div>
+  <div class="hint">FIRST TO 21 · 3 UNANSWERED = HE'S ON FIRE · R TO RESET</div>
+</div>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const W = 960, H = 540;
+const COURT_Y = 392;
+const HOOP_L = { x: 78, y: 168, rim: 214 };
+const HOOP_R = { x: 882, y: 168, rim: 214 };
+
+const keys = {};
+addEventListener("keydown", e => {
+  keys[e.key] = true;
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+  if (e.key === "r" || e.key === "R") reset();
+  if (state === "title" && (e.key === "Enter" || e.key === " ")) state = "play";
+});
+addEventListener("keyup", e => { keys[e.key] = false; });
+
+const sparks = [];
+const crowd = [];
+for (let r = 0; r < 6; r++) {
+  for (let c = 0; c < 42; c++) {
+    crowd.push({
+      x: 40 + c * 21 + (r % 2) * 8,
+      y: 78 + r * 16,
+      hue: [200, 12, 45, 280, 140, 30][(c + r) % 6],
+      phase: Math.random() * 6
+    });
+  }
+}
+
+function makePlayer(side) {
+  return {
+    side,
+    x: side === 1 ? 280 : 680,
+    y: COURT_Y,
+    vx: 0, vy: 0,
+    w: 46, h: 78,
+    face: 1,
+    turbo: 100,
+    onFire: false,
+    fireMeter: 0,
+    score: 0,
+    dunking: 0,
+    stealCd: 0,
+    shotCd: 0,
+    anim: 0,
+    cpu: side === 2
+  };
+}
+
+let p1, p2, ball, state, msg, msgT, clock, winner;
+function reset() {
+  p1 = makePlayer(1);
+  p2 = makePlayer(2);
+  ball = {
+    x: 480, y: 250, vx: 0, vy: 0,
+    holder: null, r: 11,
+    shot: false, glow: 0
+  };
+  state = "title";
+  msg = "";
+  msgT = 0;
+  clock = 180;
+  winner = null;
+  sparks.length = 0;
+}
+reset();
+state = "title";
+
+function announce(text, t = 90) { msg = text; msgT = t; }
+
+function spawnSparks(x, y, color, n = 10) {
+  for (let i = 0; i < n; i++) {
+    sparks.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 6,
+      vy: -Math.random() * 5 - 1,
+      life: 20 + Math.random() * 18,
+      color
+    });
+  }
+}
+
+function possess(player) {
+  ball.holder = player;
+  ball.shot = false;
+  ball.vx = 0; ball.vy = 0;
+}
+
+function shoot(player, dunk) {
+  if (ball.holder !== player || player.shotCd > 0) return;
+  const dir = player.side === 1 ? 1 : -1;
+  const hoop = player.side === 1 ? HOOP_R : HOOP_L;
+  ball.holder = null;
+  ball.shot = true;
+  ball.x = player.x + dir * 18;
+  ball.y = player.y - (dunk ? 70 : 58);
+  const dx = hoop.x - ball.x;
+  const dy = hoop.rim - ball.y;
+  const power = dunk ? 1.05 : 0.92;
+  ball.vx = dx * 0.045 * power + dir * (dunk ? 1.2 : 0.4);
+  ball.vy = -11.5 - Math.min(4, Math.abs(dx) / 90);
+  if (player.onFire) { ball.vx *= 1.05; ball.glow = 40; }
+  player.shotCd = dunk ? 28 : 16;
+  if (dunk) {
+    player.dunking = 22;
+    spawnSparks(ball.x, ball.y, player.side === 1 ? "#ffd23a" : "#c084fc", 16);
+  } else {
+    spawnSparks(ball.x, ball.y, "#ffb020", 6);
+  }
+}
+
+function trySteal(thief, victim) {
+  if (thief.stealCd > 0 || ball.holder !== victim) return;
+  const dist = Math.abs(thief.x - victim.x);
+  if (dist < 54 && Math.abs(thief.y - victim.y) < 30) {
+    if (Math.random() < (thief.onFire ? 0.55 : 0.38)) {
+      possess(thief);
+      announce("STEAL!");
+      spawnSparks(thief.x, thief.y - 40, "#fff", 8);
+    }
+    thief.stealCd = 30;
+  }
+}
+
+function score(side) {
+  const scorer = side === 1 ? p1 : p2;
+  const points = scorer.onFire ? 2 : 1;
+  scorer.score += points;
+  scorer.fireMeter += 1;
+  if (scorer.fireMeter >= 3 && !scorer.onFire) {
+    scorer.onFire = true;
+    announce(side === 1 ? "JORDAN'S ON FIRE!" : "LEBRON'S ON FIRE!", 120);
+  } else {
+    announce(points === 2 ? "BOOM SHAKALAKA!" : (Math.random() < 0.5 ? "FROM DOWNTOWN!" : "HE'S HEATING UP!"));
+  }
+  const other = side === 1 ? p2 : p1;
+  other.fireMeter = 0;
+  other.onFire = false;
+  spawnSparks(side === 1 ? HOOP_R.x : HOOP_L.x, 200, "#ffe14a", 22);
+  if (scorer.score >= 21) {
+    winner = scorer;
+    state = "over";
+    announce(side === 1 ? "JORDAN WINS!" : "LEBRON WINS!", 999);
+  } else {
+    setTimeout(() => {
+      if (state !== "play") return;
+      ball.holder = null;
+      ball.shot = false;
+      ball.x = 480; ball.y = 230; ball.vx = 0; ball.vy = 2;
+    }, 500);
+  }
+}
+
+function updatePlayer(p, input) {
+  p.anim++;
+  if (p.stealCd > 0) p.stealCd--;
+  if (p.shotCd > 0) p.shotCd--;
+  if (p.dunking > 0) p.dunking--;
+
+  const turboHeld = input.turbo && p.turbo > 0;
+  if (turboHeld) p.turbo = Math.max(0, p.turbo - 0.45);
+  else p.turbo = Math.min(100, p.turbo + 0.28);
+  const spd = turboHeld ? 6.4 : 4.1;
+
+  if (p.y >= COURT_Y - 0.5) {
+    p.y = COURT_Y;
+    p.vy = 0;
+    if (input.left) { p.vx = -spd; p.face = -1; }
+    else if (input.right) { p.vx = spd; p.face = 1; }
+    else p.vx *= 0.7;
+    if (input.jump) p.vy = turboHeld ? -13.4 : -11.2;
+  } else {
+    if (input.left) p.vx = Math.max(p.vx - 0.35, -spd);
+    if (input.right) p.vx = Math.min(p.vx + 0.35, spd);
+    p.vy += 0.48;
+  }
+
+  p.x += p.vx;
+  p.y += p.vy;
+  p.x = Math.max(70, Math.min(890, p.x));
+  if (p.y > COURT_Y) { p.y = COURT_Y; p.vy = 0; }
+
+  if (ball.holder === p) {
+    const dir = p.face;
+    ball.x = p.x + dir * 16;
+    ball.y = p.y - (p.dunking ? 72 : 46) + Math.sin(p.anim * 0.45) * 3;
+    if (input.shoot) {
+      const hoop = p.side === 1 ? HOOP_R : HOOP_L;
+      const near = Math.abs(p.x - hoop.x) < 150 && p.y < COURT_Y - 20;
+      shoot(p, near || p.dunking);
+    }
+  } else if (input.shoot && !ball.shot) {
+    const victim = p === p1 ? p2 : p1;
+    trySteal(p, victim);
+    if (!ball.holder && Math.hypot(p.x - ball.x, (p.y - 40) - ball.y) < 42) possess(p);
+  }
+}
+
+function cpuInput(p) {
+  const offense = ball.holder === p || (!ball.holder && ((p.side === 1 && ball.x < 480) || (p.side === 2 && ball.x > 480)));
+  const hoop = p.side === 1 ? HOOP_R : HOOP_L;
+  let left = false, right = false, jump = false, shoot = false, turbo = false;
+  if (ball.holder === p) {
+    if (p.side === 1 && p.x < hoop.x - 90) right = true;
+    else if (p.side === 2 && p.x > hoop.x + 90) left = true;
+    else {
+      jump = p.y >= COURT_Y;
+      if (p.y < COURT_Y - 30 || Math.abs(p.x - hoop.x) < 120) shoot = true;
+    }
+    turbo = Math.abs(p.x - hoop.x) > 160 && p.turbo > 20;
+  } else if (ball.holder) {
+    const v = ball.holder;
+    if (p.x > v.x + 10) left = true;
+    else if (p.x < v.x - 10) right = true;
+    shoot = Math.abs(p.x - v.x) < 50;
+    turbo = p.turbo > 30;
+  } else {
+    if (p.x > ball.x + 8) left = true;
+    else if (p.x < ball.x - 8) right = true;
+    if (ball.y < COURT_Y - 50 && Math.abs(p.x - ball.x) < 40) jump = true;
+    shoot = Math.hypot(p.x - ball.x, (p.y - 40) - ball.y) < 46;
+  }
+  return { left, right, jump, shoot, turbo };
+}
+
+function updateBall() {
+  if (ball.holder) return;
+  ball.vy += 0.42;
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+  if (ball.glow > 0) ball.glow--;
+
+  if (ball.y > COURT_Y - 8) {
+    ball.y = COURT_Y - 8;
+    ball.vy *= -0.62;
+    ball.vx *= 0.86;
+    if (Math.abs(ball.vy) < 1.4) ball.vy = 0;
+    spawnSparks(ball.x, ball.y, "#ffb040", 3);
+    ball.shot = false;
+  }
+  if (ball.x < 50 || ball.x > 910) ball.vx *= -0.8;
+
+  for (const hoop of [HOOP_L, HOOP_R]) {
+    if (ball.shot && ball.vy > 0 && Math.abs(ball.x - hoop.x) < 18 && ball.y > hoop.rim - 8 && ball.y < hoop.rim + 16) {
+      const side = hoop === HOOP_R ? 1 : 2;
+      ball.shot = false;
+      ball.vy = 2;
+      score(side);
+      return;
+    }
+  }
+
+  if (!ball.shot && ball.vy === 0) {
+    for (const p of [p1, p2]) {
+      if (Math.hypot(p.x - ball.x, (p.y - 30) - ball.y) < 36) possess(p);
+    }
+  }
+}
+
+function step() {
+  if (state !== "play") return;
+  clock -= 1 / 60;
+  if (clock <= 0) {
+    clock = 0;
+    state = "over";
+    winner = p1.score === p2.score ? null : (p1.score > p2.score ? p1 : p2);
+    announce(winner ? (winner === p1 ? "JORDAN WINS!" : "LEBRON WINS!") : "TIE GAME!", 999);
+    return;
+  }
+
+  const p2human = keys["ArrowLeft"] || keys["ArrowRight"] || keys["ArrowUp"] || keys["ArrowDown"] || keys["Enter"];
+  p2.cpu = !p2human;
+
+  const i1 = {
+    left: keys["a"] || keys["A"],
+    right: keys["d"] || keys["D"],
+    jump: keys["w"] || keys["W"],
+    shoot: keys["s"] || keys["S"],
+    turbo: keys["Shift"]
+  };
+  const i2 = p2.cpu ? cpuInput(p2) : {
+    left: keys["ArrowLeft"],
+    right: keys["ArrowRight"],
+    jump: keys["ArrowUp"],
+    shoot: keys["ArrowDown"],
+    turbo: keys["Enter"]
+  };
+  updatePlayer(p1, i1);
+  updatePlayer(p2, i2);
+  updateBall();
+
+  for (let i = sparks.length - 1; i >= 0; i--) {
+    const s = sparks[i];
+    s.x += s.vx; s.y += s.vy; s.vy += 0.15; s.life--;
+    if (s.life <= 0) sparks.splice(i, 1);
+  }
+  if (msgT > 0) msgT--;
+}
+
+function px(x, y, w, h, c) { ctx.fillStyle = c; ctx.fillRect(x | 0, y | 0, w, h); }
+
+function drawCrowd() {
+  for (const f of crowd) {
+    const bob = Math.sin(performance.now() / 220 + f.phase) > 0.2 ? -2 : 0;
+    px(f.x, f.y + bob, 8, 8, `hsl(${f.hue} 70% 48%)`);
+    px(f.x + 2, f.y - 4 + bob, 4, 4, "#f1c7a2");
+  }
+}
+
+function drawCourt() {
+  ctx.fillStyle = "#071424";
+  ctx.fillRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, 60, 0, 200);
+  g.addColorStop(0, "#10243f");
+  g.addColorStop(1, "#1a3354");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 58, W, 150);
+  drawCrowd();
+
+  for (let i = 0; i < 18; i++) {
+    ctx.fillStyle = i % 2 ? "#1f7a3a" : "#186832";
+    ctx.fillRect(30 + i * 50, 250, 50, 200);
+  }
+  ctx.strokeStyle = "#d23a3a";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(36, 250, 888, 196);
+  ctx.beginPath();
+  ctx.moveTo(480, 250); ctx.lineTo(480, 446);
+  ctx.stroke();
+  ctx.strokeStyle = "#f2f2f2";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(480, 392, 54, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = "#c9843a";
+  ctx.fillRect(0, 446, W, 94);
+
+  drawHoop(HOOP_L, -1);
+  drawHoop(HOOP_R, 1);
+}
+
+function drawHoop(h, dir) {
+  ctx.fillStyle = "#c8d0da";
+  ctx.fillRect(h.x - 6, 150, 10, 70);
+  ctx.fillStyle = "#e8eef6";
+  ctx.fillRect(h.x + (dir < 0 ? 4 : -46), 150, 42, 32);
+  ctx.strokeStyle = "#ff5030";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(h.x - 16, h.rim);
+  ctx.lineTo(h.x + 16, h.rim);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(255,255,255,.35)";
+  ctx.lineWidth = 1;
+  for (let i = -12; i <= 12; i += 6) {
+    ctx.beginPath();
+    ctx.moveTo(h.x + i, h.rim);
+    ctx.lineTo(h.x + i * 0.4, h.rim + 16);
+    ctx.stroke();
+  }
+}
+
+function drawPlayer(p) {
+  const x = p.x, y = p.y;
+  const bob = (p.y >= COURT_Y && Math.abs(p.vx) > 0.4) ? Math.sin(p.anim * 0.5) * 2 : 0;
+  const fire = p.onFire;
+  if (fire) {
+    ctx.fillStyle = "rgba(255,120,20,.35)";
+    ctx.beginPath();
+    ctx.ellipse(x, y - 36, 28, 40, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const jersey = p.side === 1 ? "#d0121c" : "#552583";
+  const trim = p.side === 1 ? "#111" : "#fdb927";
+  const skin = "#c68642";
+  ctx.fillStyle = "#222";
+  ctx.fillRect(x - 10, y - 8 + bob, 8, 8);
+  ctx.fillRect(x + 2, y - 8 + bob, 8, 8);
+  ctx.fillStyle = p.side === 1 ? "#e10600" : "#6b46c1";
+  ctx.fillRect(x - 12, y - 10 + bob, 10, 6);
+  ctx.fillRect(x + 2, y - 10 + bob, 10, 6);
+
+  ctx.fillStyle = jersey;
+  ctx.fillRect(x - 16, y - 58 + bob, 32, 30);
+  ctx.fillStyle = trim;
+  ctx.fillRect(x - 16, y - 58 + bob, 32, 4);
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 10px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("23", x, y - 40 + bob);
+  ctx.fillStyle = skin;
+  ctx.fillRect(x - 8, y - 74 + bob, 16, 16);
+  ctx.fillStyle = "#1a1a1a";
+  ctx.fillRect(x - 8, y - 76 + bob, 16, 5);
+  if (p.side === 2) {
+    ctx.fillStyle = "#fdb927";
+    ctx.fillRect(x - 9, y - 70 + bob, 18, 3);
+  }
+  ctx.fillStyle = skin;
+  ctx.fillRect(x - 22, y - 52 + bob, 8, 16);
+  ctx.fillRect(x + 14, y - 52 + bob, 8, 16);
+  ctx.fillStyle = jersey;
+  ctx.fillRect(x - 12, y - 30 + bob, 10, 16);
+  ctx.fillRect(x + 2, y - 30 + bob, 10, 16);
+
+  if (p.dunking) {
+    ctx.fillStyle = skin;
+    ctx.fillRect(x + p.face * 10, y - 78, 8, 14);
+  }
+}
+
+function drawBall() {
+  const x = ball.x, y = ball.y;
+  if (ball.glow > 0 || (ball.holder && ball.holder.onFire)) {
+    ctx.fillStyle = "rgba(255,180,40,.45)";
+    ctx.beginPath();
+    ctx.arc(x, y, 16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = "#e87512";
+  ctx.beginPath();
+  ctx.arc(x, y, ball.r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#5a2808";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y, ball.r - 1, 0, Math.PI * 2);
+  ctx.moveTo(x - ball.r, y); ctx.lineTo(x + ball.r, y);
+  ctx.moveTo(x, y - ball.r); ctx.lineTo(x, y + ball.r);
+  ctx.stroke();
+  if (ball.vx || ball.vy) {
+    ctx.strokeStyle = "rgba(255,200,80,.5)";
+    ctx.beginPath();
+    ctx.moveTo(x - ball.vx * 2, y - ball.vy * 2);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+}
+
+function hud() {
+  ctx.textAlign = "left";
+  ctx.font = "bold 16px monospace";
+  ctx.fillStyle = "#ffe14a";
+  ctx.fillText("PLAYER 1", 28, 28);
+  ctx.fillStyle = "#ff3b3b";
+  ctx.fillText("MICHAEL JORDAN", 28, 48);
+  ctx.fillStyle = "#fff";
+  ctx.font = "12px monospace";
+  ctx.fillText("CHICAGO BULLS", 28, 66);
+  ctx.fillStyle = "#ffe14a";
+  ctx.font = "bold 20px monospace";
+  ctx.fillText(String(p1.score).padStart(2, "0"), 28, 92);
+
+  ctx.textAlign = "right";
+  ctx.font = "bold 16px monospace";
+  ctx.fillStyle = "#ffe14a";
+  ctx.fillText("PLAYER 2", W - 28, 28);
+  ctx.fillStyle = "#c084fc";
+  ctx.fillText("LEBRON JAMES", W - 28, 48);
+  ctx.fillStyle = "#fff";
+  ctx.font = "12px monospace";
+  ctx.fillText("LOS ANGELES LAKERS", W - 28, 66);
+  ctx.fillStyle = "#ffe14a";
+  ctx.font = "bold 20px monospace";
+  ctx.fillText(String(p2.score).padStart(2, "0"), W - 28, 92);
+
+  const m = Math.floor(clock / 60);
+  const s = Math.floor(clock % 60);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 22px monospace";
+  ctx.fillText(`${m}:${String(s).padStart(2, "0")}`, W / 2, 32);
+  ctx.fillStyle = "#ffd23a";
+  ctx.font = "12px monospace";
+  ctx.fillText("JAM", W / 2, 50);
+
+  function meter(x, val, fire) {
+    ctx.fillStyle = "#222";
+    ctx.fillRect(x, 100, 80, 8);
+    ctx.fillStyle = fire ? "#ff6a00" : "#3dff7a";
+    ctx.fillRect(x, 100, val * 0.8, 8);
+  }
+  meter(28, p1.turbo, p1.onFire);
+  meter(W - 108, p2.turbo, p2.onFire);
+  ctx.textAlign = "left";
+  ctx.font = "9px monospace";
+  ctx.fillStyle = p1.onFire ? "#ffb020" : "#9ad";
+  ctx.fillText(p1.onFire ? "ON FIRE" : "TURBO", 28, 122);
+  ctx.textAlign = "right";
+  ctx.fillStyle = p2.onFire ? "#ffb020" : "#9ad";
+  ctx.fillText(p2.onFire ? "ON FIRE" : "TURBO", W - 28, 122);
+
+  if (msgT > 0) {
+    ctx.textAlign = "center";
+    ctx.font = "bold 26px monospace";
+    ctx.fillStyle = "#111";
+    ctx.fillText(msg, W / 2 + 3, 183);
+    ctx.fillStyle = "#ffe14a";
+    ctx.fillText(msg, W / 2, 180);
+  }
+}
+
+function drawTitle() {
+  ctx.fillStyle = "rgba(0,0,0,.55)";
+  ctx.fillRect(0, 150, W, 230);
+  ctx.textAlign = "center";
+  ctx.font = "bold 42px monospace";
+  ctx.fillStyle = "#ffd23a";
+  ctx.fillText("NBA JAM", W / 2, 220);
+  ctx.font = "16px monospace";
+  ctx.fillStyle = "#39ff6a";
+  ctx.fillText("TOURNAMENT EDITION", W / 2, 250);
+  ctx.fillStyle = "#fff";
+  ctx.font = "13px monospace";
+  ctx.fillText("JORDAN  vs  LEBRON", W / 2, 292);
+  ctx.fillStyle = "#ffb0a0";
+  ctx.fillText("PRESS ENTER TO TIP OFF", W / 2, 334);
+}
+
+function drawOver() {
+  ctx.fillStyle = "rgba(0,0,0,.55)";
+  ctx.fillRect(0, 160, W, 200);
+  ctx.textAlign = "center";
+  ctx.font = "bold 32px monospace";
+  ctx.fillStyle = "#ffe14a";
+  ctx.fillText(winner ? (winner === p1 ? "JORDAN WINS" : "LEBRON WINS") : "TIE GAME", W / 2, 230);
+  ctx.font = "16px monospace";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`${p1.score}  -  ${p2.score}`, W / 2, 270);
+  ctx.fillStyle = "#ffb0a0";
+  ctx.fillText("PRESS R TO PLAY AGAIN", W / 2, 314);
+}
+
+function frame() {
+  step();
+  drawCourt();
+  const order = [p1, p2].sort((a, b) => a.y - b.y);
+  order.forEach(drawPlayer);
+  drawBall();
+  for (const s of sparks) {
+    ctx.globalAlpha = Math.max(0, s.life / 30);
+    ctx.fillStyle = s.color;
+    ctx.fillRect(s.x, s.y, 3, 3);
+    ctx.globalAlpha = 1;
+  }
+  hud();
+  if (state === "title") drawTitle();
+  if (state === "over") drawOver();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

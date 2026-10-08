@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Temple Escape - Indiana-Style Adventure</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#120d08;color:#fff;font-family:Arial,Helvetica,sans-serif}
+  body{display:flex;align-items:center;justify-content:center}
+  canvas{display:block;background:#1b120b;image-rendering:auto;box-shadow:0 0 40px #000}
+  #help{position:fixed;left:14px;bottom:10px;font-size:12px;color:#d9c8a5;background:rgba(0,0,0,.45);padding:6px 9px;border-radius:5px;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="game" width="1200" height="700"></canvas>
+<div id="help">A/D or ←/→ move • W/↑/Space jump (double jump) • J or Z whip • R restart</div>
+<script>
+'use strict';
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+const W=canvas.width,H=canvas.height;
+
+const keys={};
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true; if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()))e.preventDefault(); if(e.key.toLowerCase()==='r'&&gameState!=='play')reset();});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+
+const level={width:7200,height:1200};
+let cameraX=0,cameraY=0,gameState='title',score=0,lives=3,time=0,message='',messageTimer=0,finishTimer=0;
+
+const player={x:120,y:520,w:30,h:46,vx:0,vy:0,speed:250,jump:560,onGround:false,jumpsUsed:0,maxJumps:2,facing:1,whipTimer:0,invuln:0,spawnX:120,spawnY:520};
+
+const platforms=[
+{x:0,y:610,w:620,h:60},{x:760,y:610,w:490,h:60},{x:1380,y:610,w:540,h:60},{x:2040,y:610,w:410,h:60},
+{x:2550,y:610,w:580,h:60},{x:3220,y:610,w:470,h:60},{x:3820,y:610,w:500,h:60},{x:4460,y:610,w:620,h:60},
+{x:5200,y:610,w:470,h:60},{x:5830,y:610,w:640,h:60},{x:6600,y:610,w:600,h:60},
+{x:350,y:470,w:170,h:22},{x:860,y:470,w:180,h:22},{x:1120,y:390,w:140,h:22},{x:1500,y:470,w:180,h:22},
+{x:1720,y:360,w:160,h:22},{x:2140,y:470,w:170,h:22},{x:2680,y:455,w:160,h:22},{x:2920,y:360,w:150,h:22},
+{x:3370,y:440,w:170,h:22},{x:3640,y:340,w:160,h:22},{x:3920,y:450,w:180,h:22},{x:4230,y:350,w:140,h:22},
+{x:4620,y:460,w:170,h:22},{x:4900,y:340,w:180,h:22},{x:5300,y:455,w:150,h:22},{x:5560,y:350,w:170,h:22},
+{x:5940,y:450,w:170,h:22},{x:6260,y:340,w:160,h:22},{x:6690,y:455,w:170,h:22}
+];
+
+const spikes=[
+{x:600,y:574,w:150,h:36},{x:1250,y:574,w:130,h:36},{x:1920,y:574,w:120,h:36},{x:2450,y:574,w:100,h:36},
+{x:3130,y:574,w:90,h:36},{x:3690,y:574,w:130,h:36},{x:4320,y:574,w:140,h:36},{x:5080,y:574,w:120,h:36},{x:5670,y:574,w:160,h:36},{x:6470,y:574,w:130,h:36}
+];
+
+const pits=[];
+for(let x=620;x<7200;x+=540) pits.push({x:x,w:140});
+
+const gems=[
+{x:420,y:430},{x:930,y:430},{x:1180,y:350},{x:1560,y:430},{x:1790,y:320},{x:2200,y:430},{x:2730,y:415},{x:2970,y:320},
+{x:3420,y:400},{x:3700,y:300},{x:3970,y:410},{x:4290,y:310},{x:4680,y:420},{x:4970,y:300},{x:5370,y:415},{x:5650,y:310},
+{x:6020,y:410},{x:6350,y:300},{x:6760,y:415}
+].map((g,i)=>({...g,r:11,collected:false,id:i}));
+
+const enemies=[
+{x:1040,y:554,w:34,h:46,vx:-55,min:790,max:1220,kind:'guard'},
+{x:1740,y:314,w:34,h:46,vx:45,min:1630,max:1890,kind:'guard'},
+{x:2270,y:564,w:34,h:46,vx:65,min:2050,max:2400,kind:'guard'},
+{x:3470,y:394,w:34,h:46,vx:-45,min:3370,max:3535,kind:'guard'},
+{x:4020,y:404,w:34,h:46,vx:55,min:3890,max:4100,kind:'guard'},
+{x:4740,y:414,w:34,h:46,vx:-55,min:4620,max:4790,kind:'guard'},
+{x:5440,y:409,w:34,h:46,vx:50,min:5310,max:5445,kind:'guard'},
+{x:6110,y:404,w:34,h:46,vx:-55,min:5940,max:6110,kind:'guard'}
+].map(e=>({...e,alive:true,stun:0}));
+
+const rollingBoulders=[
+{x:1560,y:80,r:28,vx:-90,vy:0,active:false,startX:1560},
+{x:4100,y:80,r:34,vx:-110,vy:0,active:false,startX:4100},
+{x:6030,y:80,r:32,vx:-105,vy:0,active:false,startX:6030}
+];
+
+const checkpoints=[{x:1200,y:520,active:false},{x:2500,y:520,active:false},{x:3820,y:520,active:false},{x:5200,y:520,active:false},{x:6600,y:520,active:false}];
+
+const templeColumns=[
+{x:80,y:230,w:80,h:380},{x:1180,y:170,w:55,h:440},{x:1900,y:210,w:65,h:400},{x:3120,y:180,w:80,h:430},
+{x:4310,y:160,w:65,h:450},{x:5680,y:190,w:75,h:420},{x:7060,y:190,w:80,h:420}
+];
+
+function reset(){
+ gameState='play';score=0;lives=3;time=0;finishTimer=0;message='';
+ player.x=player.spawnX=120;player.y=player.spawnY=520;player.vx=player.vy=0;player.invuln=0;player.onGround=false;player.jumpsUsed=0;player.jumpLock=false;
+ gems.forEach(g=>g.collected=false);enemies.forEach(e=>{e.alive=true;e.stun=0});
+ rollingBoulders.forEach(b=>{b.x=b.startX;b.y=80;b.vx=-Math.abs(b.vx);b.vy=0;b.active=false});
+ checkpoints.forEach(c=>c.active=false);
+}
+
+function rectsOverlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function showMsg(t){message=t;messageTimer=2.5;}
+function hurt(reason){
+ if(player.invuln>0)return;
+ lives--;player.invuln=2.0;player.vy=-300;player.vx=-player.facing*120;showMsg(reason||'Watch out!');
+ if(lives<=0){gameState='gameover';return;}
+ player.x=player.spawnX;player.y=player.spawnY;player.vx=player.vy=0;player.onGround=false;player.jumpsUsed=0;player.jumpLock=false;
+}
+
+function update(dt){
+ if(gameState==='title'||gameState==='gameover'||gameState==='win')return;
+ time+=dt;
+ if(messageTimer>0)messageTimer-=dt;
+ if(player.invuln>0)player.invuln-=dt;
+
+ const left=keys['a']||keys['arrowleft'],right=keys['d']||keys['arrowright'],jump=keys['w']||keys['arrowup']||keys[' '],whip=keys['j']||keys['z'];
+ let move=(right?1:0)-(left?1:0);
+ player.vx += move*player.speed*dt*7;
+ if(!move) player.vx *= Math.pow(0.001,dt);
+ player.vx=clamp(player.vx,-player.speed,player.speed);
+ if(move)player.facing=move;
+ if(jump && !player.jumpLock && player.jumpsUsed<player.maxJumps){
+   player.vy=-player.jump;
+   player.onGround=false;
+   player.jumpsUsed++;
+   player.jumpLock=true;
+ }
+ if(!jump)player.jumpLock=false;
+ if(whip && player.whipCooldown<=0){player.whipTimer=.20;player.whipCooldown=.42;}
+ if(player.whipCooldown>0)player.whipCooldown-=dt;
+ if(player.whipTimer>0)player.whipTimer-=dt;
+
+ player.vy+=1450*dt;
+ let oldY=player.y;
+ player.x+=player.vx*dt;player.y+=player.vy*dt;
+ player.x=clamp(player.x,0,level.width-player.w);
+ player.onGround=false;
+ for(const p of platforms){
+   if(player.x+player.w>p.x&&player.x<p.x+p.w){
+     if(oldY+player.h<=p.y && player.y+player.h>=p.y && player.vy>=0){player.y=p.y-player.h;player.vy=0;player.onGround=true;player.jumpsUsed=0;}
+     else if(oldY>=p.y+p.h && player.y<=p.y+p.h && player.vy<0){player.y=p.y+p.h;player.vy=0;}
+   }
+ }
+ for(const s of spikes){if(rectsOverlap(player,{x:s.x,y:s.y,w:s.w,h:s.h}))hurt('Spikes!');}
+ if(player.y>760)hurt('You fell!');
+
+ for(const c of checkpoints){if(!c.active&&player.x>c.x){c.active=true;player.spawnX=c.x;player.spawnY=c.y;showMsg('Checkpoint reached!');}}
+ for(const g of gems){if(!g.collected&&Math.hypot(player.x+player.w/2-g.x,player.y+player.h/2-g.y)<30){g.collected=true;score+=100;showMsg('+100 treasure');}}
+
+ for(const e of enemies){
+   if(!e.alive)continue;
+   e.x+=e.vx*dt;
+   if(e.x<e.min||e.x>e.max)e.vx*=-1;
+   if(e.stun>0)e.stun-=dt;
+   if(rectsOverlap(player,e)){
+      const whipHit=player.whipTimer>0 && ((player.facing>0&&player.x<e.x)||(player.facing<0&&player.x>e.x));
+      if(whipHit){e.alive=false;score+=200;showMsg('+200 guard defeated');}
+      else if(player.vy>100&&player.y+player.h-e.y<20){e.alive=false;player.vy=-330;score+=150;showMsg('+150 stomp');}
+      else hurt('A guard caught you!');
+   }
+ }
+
+ for(const b of rollingBoulders){
+   if(!b.active && player.x>b.startX-380)b.active=true;
+   if(b.active){b.vy+=1200*dt;b.x+=b.vx*dt;b.y+=b.vy*dt;let landed=false;
+     for(const p of platforms){if(b.x+b.r>p.x&&b.x-b.r<p.x+p.w&&b.y+b.r>=p.y&&b.y-b.r<p.y&&b.vy>0){b.y=p.y-b.r;b.vy=0;landed=true;}}
+     if(b.y>900){b.x=b.startX;b.y=80;b.vy=0;b.active=false;}
+     if(Math.hypot(player.x+player.w/2-b.x,player.y+player.h/2-b.y)<b.r+25)hurt('BOULDER!');
+   }
+ }
+
+ const goalX=6980;
+ if(player.x>goalX){
+   gameState='win';finishTimer=time;
+ }
+ cameraX+=(player.x-420-cameraX)*Math.min(1,dt*5);
+ cameraX=clamp(cameraX,0,level.width-W);
+ cameraY=0;
+}
+
+function drawBackground(){
+ const grd=ctx.createLinearGradient(0,0,0,H);grd.addColorStop(0,'#6b4728');grd.addColorStop(.55,'#3d2818');grd.addColorStop(1,'#1c120b');ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
+ // distant mountains
+ ctx.fillStyle='#2a1b12';
+ for(let i=0;i<18;i++){let x=((i*470-cameraX*.18)%3000)-300;let h=100+(i%5)*45;ctx.beginPath();ctx.moveTo(x,470);ctx.lineTo(x+170,470-h);ctx.lineTo(x+360,470);ctx.closePath();ctx.fill();}
+ // torch glow
+ for(let x=250;x<7200;x+=620){
+   let sx=x-cameraX*0.45;
+   if(sx>-100&&sx<W+100){let g=ctx.createRadialGradient(sx,290,2,sx,290,95);g.addColorStop(0,'rgba(255,196,83,.30)');g.addColorStop(1,'rgba(255,196,83,0)');ctx.fillStyle=g;ctx.fillRect(sx-100,190,sx+100,200)}
+ }
+}
+
+function drawTemple(){
+ ctx.save();ctx.translate(-cameraX,-cameraY);
+ for(const c of templeColumns){
+   ctx.fillStyle='#7f633e';ctx.fillRect(c.x,c.y,c.w,c.h);
+   ctx.fillStyle='#5d452b';ctx.fillRect(c.x-8,c.y-14,c.w+16,20);ctx.fillRect(c.x-8,c.y+c.h-5,c.w+16,15);
+   ctx.strokeStyle='rgba(0,0,0,.3)';ctx.strokeRect(c.x,c.y,c.w,c.h);
+ }
+ ctx.fillStyle='#8f7047';ctx.fillRect(6750,140,360,30);ctx.fillStyle='#5b432b';ctx.fillRect(6780,170,300,280);
+ // murals / hieroglyphs
+ ctx.fillStyle='rgba(41,24,13,.45)';
+ for(let x=0;x<7200;x+=260){ctx.fillRect(x,220+(x/260%3)*15,150,4);ctx.fillRect(x+15,245+(x/260%3)*15,5,45);ctx.fillRect(x+45,245+(x/260%3)*15,5,45);ctx.fillRect(x+75,245+(x/260%3)*15,5,45);}
+ ctx.restore();
+}
+
+function drawPlatforms(){
+ ctx.save();ctx.translate(-cameraX,-cameraY);
+ for(const p of platforms){
+   ctx.fillStyle='#6c4c2d';ctx.fillRect(p.x,p.y,p.w,p.h);
+   ctx.fillStyle='#92704a';ctx.fillRect(p.x,p.y,p.w,8);
+   ctx.strokeStyle='rgba(0,0,0,.35)';ctx.strokeRect(p.x,p.y,p.w,p.h);
+   for(let x=p.x+18;x<p.x+p.w-10;x+=40){ctx.fillStyle='rgba(40,25,15,.25)';ctx.fillRect(x,p.y+17,24,4)}
+ }
+ // spikes
+ for(const s of spikes){ctx.fillStyle='#d0d0b0';ctx.beginPath();for(let i=0;i<8;i++){let bx=s.x+i*s.w/8;ctx.moveTo(bx,s.y+s.h);ctx.lineTo(bx+s.w/16,s.y);ctx.lineTo(bx+s.w/8,s.y+s.h)}ctx.fill();}
+ ctx.restore();
+}
+
+function drawGem(g){
+ if(g.collected)return;const pulse=Math.sin(time*5+g.id)*2;ctx.save();ctx.translate(g.x-cameraX,g.y-pulse);ctx.shadowColor='#ffd34e';ctx.shadowBlur=18;ctx.fillStyle='#f2bf32';ctx.beginPath();ctx.moveTo(0,-13);ctx.lineTo(10,-4);ctx.lineTo(7,10);ctx.lineTo(-7,10);ctx.lineTo(-10,-4);ctx.closePath();ctx.fill();ctx.restore()}
+
+function drawEnemy(e){
+ if(!e.alive)return;const x=e.x-cameraX,y=e.y;ctx.save();ctx.translate(x,y);
+ ctx.fillStyle='#2c251f';ctx.fillRect(7,14,20,28);ctx.fillStyle='#b98957';ctx.beginPath();ctx.arc(17,10,9,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#574127';ctx.fillRect(1,2,32,5);ctx.fillRect(6,-3,22,7);
+ ctx.fillStyle='#d9c7a4';ctx.fillRect(9,19,5,4);ctx.fillRect(20,19,5,4);ctx.fillStyle='#8f1717';ctx.fillRect(11,20,2,2);ctx.fillRect(21,20,2,2);
+ ctx.fillStyle='#4e3721';ctx.fillRect(2,42,10,4);ctx.fillRect(22,42,10,4);ctx.restore();
+}
+
+function drawBoulder(b){if(!b.active)return;ctx.save();ctx.translate(b.x-cameraX,b.y);ctx.rotate(time*4);ctx.fillStyle='#54432e';ctx.beginPath();ctx.arc(0,0,b.r,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#2f2419';ctx.lineWidth=5;ctx.stroke();for(let i=0;i<5;i++){ctx.strokeStyle='#8b704a';ctx.beginPath();ctx.arc(0,0,b.r*(.3+i*.12),i*.8,(i*.8)+2);ctx.stroke();}ctx.restore();}
+
+function drawPlayer(){
+ if(player.invuln>0&&Math.floor(player.invuln*10)%2===0)return;
+ const x=player.x-cameraX,y=player.y;ctx.save();ctx.translate(x+player.w/2,y+player.h/2);ctx.scale(player.facing,1);
+ // legs
+ ctx.fillStyle='#2f261f';let walk=Math.sin(time*12*clamp(Math.abs(player.vx)/80,0,1));ctx.fillRect(-11,15,8,25+walk*3);ctx.fillRect(3,15,8,25-walk*3);
+ // body and shirt
+ ctx.fillStyle='#9f6b3b';ctx.fillRect(-13,-5,26,25);ctx.fillStyle='#5b341c';ctx.fillRect(-14,5,28,5);
+ // head
+ ctx.fillStyle='#b97b4b';ctx.beginPath();ctx.arc(0,-16,10,0,Math.PI*2);ctx.fill();
+ // hat
+ ctx.fillStyle='#5a3a1f';ctx.fillRect(-12,-27,24,7);ctx.fillRect(-8,-31,16,6);
+ // face
+ ctx.fillStyle='#1f1811';ctx.fillRect(4,-18,3,3);
+ // arms / whip
+ ctx.fillStyle='#b97b4b';ctx.fillRect(-16,-2,7,17);ctx.fillRect(9,-2,7,17);
+ if(player.whipTimer>0){
+   ctx.strokeStyle='#d4b17b';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(14,7);ctx.quadraticCurveTo(40,-9,62,9);ctx.quadraticCurveTo(42,25,22,14);ctx.stroke();
+   ctx.fillStyle='#d9c19a';ctx.beginPath();ctx.arc(63,9,3,0,Math.PI*2);ctx.fill();
+ }
+ ctx.restore();
+}
+
+function drawHUD(){
+ ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(15,15,300,92);
+ ctx.fillStyle='#f6dfae';ctx.font='bold 22px Arial';ctx.fillText('TEMPLE ESCAPE',30,43);
+ ctx.font='16px Arial';ctx.fillText('Treasure: '+score,30,70);ctx.fillText('Lives: '+ '❤'.repeat(Math.max(0,lives)),30,93);
+ ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(W-290,15,275,58);ctx.fillStyle='#f6dfae';ctx.font='14px Arial';ctx.fillText('Find the golden idol and escape!',W-270,40);ctx.fillText('Checkpoint: '+checkpoints.filter(c=>c.active).length+'/'+checkpoints.length,W-270,61);
+ if(messageTimer>0){ctx.font='bold 24px Arial';ctx.textAlign='center';ctx.fillStyle='#ffe09b';ctx.fillText(message,W/2,100);ctx.textAlign='left';}
+}
+
+function drawGoal(){
+ const x=6975-cameraX;ctx.save();ctx.translate(x,500);ctx.fillStyle='#a07a46';ctx.fillRect(0,0,100,110);ctx.fillStyle='#2b1a10';ctx.fillRect(20,20,60,90);ctx.fillStyle='#d39b31';ctx.beginPath();ctx.arc(50,60,22,0,Math.PI*2);ctx.fill();ctx.fillStyle='#ffe07a';ctx.beginPath();ctx.arc(43,52,7,0,Math.PI*2);ctx.fill();ctx.restore();
+}
+
+function render(){
+ drawBackground();drawTemple();drawPlatforms();
+ drawGoal();
+ for(const g of gems)drawGem(g);
+ for(const b of rollingBoulders)drawBoulder(b);
+ for(const e of enemies)drawEnemy(e);
+ drawPlayer();drawHUD();
+ if(gameState==='title')drawTitle();
+ else if(gameState==='gameover')drawEnd(false);
+ else if(gameState==='win')drawEnd(true);
+}
+
+function drawTitle(){
+ ctx.fillStyle='rgba(8,5,3,.72)';ctx.fillRect(0,0,W,H);
+ ctx.textAlign='center';ctx.fillStyle='#f1d197';ctx.font='bold 54px Georgia';ctx.fillText('TEMPLE ESCAPE',W/2,210);
+ ctx.font='24px Arial';ctx.fillText('An Indiana-style jungle adventure',W/2,255);
+ ctx.font='18px Arial';ctx.fillStyle='#fff3d0';ctx.fillText('Grab treasure. Crack the whip. Avoid traps. Reach the idol.',W/2,315);
+ ctx.fillText('A / D or Arrow Keys = Move     W / Up / Space = Jump / Double Jump     J / Z = Whip',W/2,355);
+ ctx.fillStyle='#e8b85b';ctx.font='bold 26px Arial';ctx.fillText('PRESS ENTER TO BEGIN',W/2,445);
+ ctx.font='15px Arial';ctx.fillStyle='#d0bea0';ctx.fillText('Fan-made adventure game. No official Indiana Jones assets used.',W/2,515);
+ ctx.textAlign='left';
+}
+function drawEnd(win){
+ ctx.fillStyle='rgba(7,4,2,.72)';ctx.fillRect(0,0,W,H);ctx.textAlign='center';ctx.fillStyle=win?'#ffd66c':'#f06d4f';ctx.font='bold 54px Georgia';ctx.fillText(win?'ESCAPE!':'GAME OVER',W/2,245);
+ ctx.fillStyle='#fff2d0';ctx.font='24px Arial';ctx.fillText(win?'You made it out with the treasure.':'The temple claimed another archaeologist.',W/2,300);
+ ctx.font='20px Arial';ctx.fillText('Score: '+score+'   •   Time: '+time.toFixed(1)+'s',W/2,345);
+ ctx.fillStyle='#e8b85b';ctx.font='bold 24px Arial';ctx.fillText('PRESS R TO RESTART',W/2,415);ctx.textAlign='left';
+}
+
+addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&gameState==='title'){reset();}});
+let last=performance.now();
+function loop(now){const dt=Math.min(.033,(now-last)/1000);last=now;update(dt);render();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

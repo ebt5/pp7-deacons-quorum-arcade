@@ -1,0 +1,1687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Young Knight</title>
+<style>
+  html,body{
+    margin:0;
+    padding:0;
+    background:#080812;
+    color:#fff;
+    font-family:monospace;
+  }
+  body{
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+  }
+  #gameWrap{
+    width:min(1000px,100vw);
+    padding:10px;
+    box-sizing:border-box;
+    text-align:center;
+  }
+  canvas{
+    display:block;
+    width:100%;
+    height:auto;
+    aspect-ratio:16/9;
+    background:#10152a;
+    border:4px solid #d8c57a;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    box-shadow:0 0 0 4px #382e51,0 12px 40px rgba(0,0,0,.6);
+    touch-action:none;
+  }
+  #help{
+    margin-top:8px;
+    color:#c9c9d9;
+    font-size:13px;
+    line-height:1.6;
+  }
+  kbd{
+    border:1px solid #777;
+    background:#222;
+    padding:2px 5px;
+    border-radius:3px;
+  }
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="game" width="960" height="540" aria-label="Pixel Knight Coin Quest"></canvas>
+  <div id="help">
+    Move <kbd>←</kbd><kbd>→</kbd> · Jump <kbd>↑</kbd> · Shield <kbd>↓</kbd> ·
+    Attack <kbd>Space</kbd> · Shop <kbd>A</kbd> · Start/Restart <kbd>Enter</kbd>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = false;
+
+  const W = canvas.width;
+  const H = canvas.height;
+  const GROUND_Y = 465;
+  const MAX_HEARTS = 10;
+
+  const keys = Object.create(null);
+  let state = "title";
+  let lastTime = performance.now();
+
+  let enemySpawnTimer = 0;
+  let batSpawnTimer = 7;
+  let fireballTimer = 1.7;
+  let coinTimer = 5.5;
+
+  let particles = [];
+  let floatingTexts = [];
+  let game = null;
+
+  function resetGame() {
+    game = {
+      score: 0,
+      coins: 35,
+      hearts: 10,
+      wave: 1,
+      enemiesDefeated: 0,
+      time: 0,
+      damageCooldown: 0,
+      dragon: null,
+      dragonNextWave: 3,
+      dragonAshes: [],
+      fireZones: [],
+      player: {
+        x: 140,
+        y: GROUND_Y - 34,
+        w: 24,
+        h: 34,
+        vx: 0,
+        vy: 0,
+        speed: 220,
+        jumpPower: 470,
+        onGround: true,
+        facing: 1,
+        attackTimer: 0,
+        attackCooldown: 0,
+        swordLevel: 1,
+        armorLevel: 1,
+        glowTimer: 0,
+        shield: false,
+        shieldTime: 0,
+        shieldPulse: 0,
+        walkTimer: 0
+      },
+      enemies: [],
+      fireballs: [],
+      coinsPickups: []
+    };
+
+    enemySpawnTimer = 1.9;
+    batSpawnTimer = 7;
+    fireballTimer = 1.6;
+    coinTimer = 5.5;
+    particles = [];
+    floatingTexts = [];
+  }
+
+  function startGame() {
+    resetGame();
+    state = "playing";
+  }
+
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const rectHit = (a, b) =>
+    a.x < b.x + b.w &&
+    a.x + a.w > b.x &&
+    a.y < b.y + b.h &&
+    a.y + a.h > b.y;
+
+  function addText(x, y, text, color = "#fff") {
+    floatingTexts.push({ x, y, text, color, life: 0.9, maxLife: 0.9 });
+  }
+
+  function burst(x, y, color, count = 10) {
+    for (let i = 0; i < count; i++) {
+      const a = rand(0, Math.PI * 2);
+      const s = rand(40, 180);
+      particles.push({
+        x,
+        y,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s,
+        life: rand(0.25, 0.75),
+        maxLife: 0.75,
+        color,
+        size: Math.random() < 0.7 ? 3 : 5
+      });
+    }
+  }
+
+  function recordDefeat() {
+    game.enemiesDefeated++;
+    if (game.enemiesDefeated === 25 && !game.dragon && game.wave >= game.dragonNextWave) {
+      spawnDragon();
+    }
+  }
+
+  function damagePlayer() {
+    const p = game.player;
+    if (game.damageCooldown > 0) return;
+
+    if (p.shield) {
+      p.shieldPulse = 0.22;
+      addText(p.x + 28, p.y - 16, "BLOCK!", "#9ce8ff");
+      burst(p.x + 28, p.y + 17, "#9ce8ff", 7);
+      return;
+    }
+
+    game.hearts--;
+    game.damageCooldown = 0.72;
+    burst(p.x + 12, p.y + 16, "#ff5969", 12);
+    addText(p.x + 12, p.y - 12, "-1 HEART", "#ff7777");
+
+    if (game.hearts <= 0) {
+      game.hearts = 0;
+      state = "gameover";
+    }
+  }
+
+  function addCoins(amount) {
+    game.coins += amount;
+    game.score += amount * 10;
+    addText(game.player.x + 12, game.player.y - 14, "+" + amount + " COINS", "#ffd85e");
+  }
+
+  function spawnCoinPickup(x, y, amount = 2) {
+    game.coinsPickups.push({
+      x,
+      y,
+      w: 15,
+      h: 15,
+      amount,
+      bob: rand(0, Math.PI * 2)
+    });
+  }
+
+  function spawnEnemy() {
+    const groundCount = game.enemies.filter(
+      e => e.kind === "slime" || e.kind === "orc"
+    ).length;
+
+    if (groundCount >= 3) return;
+
+    const kind = Math.random() < 0.58 ? "slime" : "orc";
+    const fromRight = Math.random() < 0.85;
+
+    game.enemies.push({
+      kind,
+      x: fromRight ? W + 35 : -60,
+      y: kind === "slime" ? GROUND_Y - 28 : GROUND_Y - 50,
+      w: kind === "slime" ? 30 : 32,
+      h: kind === "slime" ? 28 : 50,
+      hp: kind === "slime" ? 2 : 4,
+      maxHp: kind === "slime" ? 2 : 4,
+      speed: kind === "slime" ? rand(48, 68) : rand(32, 48),
+      dir: fromRight ? -1 : 1,
+      pulse: rand(0, Math.PI * 2),
+      knockback: 0
+    });
+  }
+
+  function spawnBat() {
+    if (game.enemies.filter(e => e.kind === "bat").length >= 2) return;
+
+    const fromRight = Math.random() < 0.72;
+    const y = rand(130, 310);
+
+    game.enemies.push({
+      kind: "bat",
+      x: fromRight ? W + 45 : -45,
+      y,
+      baseY: y,
+      w: 36,
+      h: 22,
+      hp: 1,
+      maxHp: 1,
+      speed: rand(58, 85),
+      dir: fromRight ? -1 : 1,
+      pulse: rand(0, Math.PI * 2),
+      phase: rand(0, Math.PI * 2),
+      knockback: 0
+    });
+  }
+
+  function spawnFireball(x = W + 30, y = rand(190, 400), vx = -rand(165, 225), dragon = false) {
+    game.fireballs.push({
+      x,
+      y,
+      w: dragon ? 24 : 18,
+      h: dragon ? 24 : 18,
+      vx,
+      vy: dragon ? rand(-18, 18) : rand(-25, 25),
+      spin: rand(0, Math.PI * 2),
+      dragonFlame: dragon,
+      life: dragon ? 2.7 : Infinity
+    });
+  }
+
+  function spawnDragon() {
+    if (game.dragon) return;
+    game.dragon = {
+      x: W + 220,
+      y: 125,
+      targetX: 58,
+      groundY: GROUND_Y - 150,
+      w: 190,
+      h: 160,
+      hp: 65,
+      maxHp: 65,
+      wingTimer: 0,
+      fireTimer: 2.3,
+      roarTimer: 1.8,
+      hitCooldown: 0,
+      mode: 'flying',
+      flyTime: 0,
+      aim: 0,
+      fireAnim: 0,
+      fireShot: false,
+      headBob: 0,
+      breath: 0,
+      roarPulse: 0,
+      landed: false,
+      dying: false,
+      deathTimer: 0,
+      deathMax: 4.2,
+      deathBurstTimer: 0,
+      flameTime: 0,
+      fallAngle: 0
+    };
+    addText(W / 2, 150, 'THE DRAGON IS FLYING IN!', '#ff646e');
+    burst(W - 80, 170, '#8c2636', 25);
+  }
+
+  function attack() {
+    const p = game.player;
+
+    // Sword cannot be used while shield is equipped.
+    if (p.shield || p.attackCooldown > 0 || state !== "playing") return;
+
+    p.attackTimer = 0.30;
+    p.attackCooldown = Math.max(0.20, 0.36 - p.swordLevel * 0.025);
+    p.glowTimer = 0.35;
+
+    const reach = 54 + p.swordLevel * 5;
+    const hitbox = {
+      x: p.facing === 1 ? p.x + 10 : p.x - reach + 14,
+      y: p.y - 8,
+      w: reach,
+      h: 48
+    };
+
+    let hitSomething = false;
+
+    for (let i = game.enemies.length - 1; i >= 0; i--) {
+      const e = game.enemies[i];
+
+      if (!rectHit(hitbox, e)) continue;
+
+      e.hp -= p.swordLevel >= 2 ? 2 : 1;
+      e.knockback = 0.32;
+      e.x += p.facing * 20;
+      hitSomething = true;
+
+      burst(
+        e.x + e.w / 2,
+        e.y + e.h / 2,
+        e.kind === "bat" ? "#ffd85e" : "#8de7ff",
+        8
+      );
+
+      if (e.hp <= 0) {
+        recordDefeat();
+
+        if (e.kind === "bat") {
+          addCoins(8 + Math.floor(Math.random() * 5));
+          for (let j = 0; j < 10; j++) {
+            const a = rand(0, Math.PI * 2);
+            const r = rand(12, 38);
+            spawnCoinPickup(
+              e.x + e.w / 2 + Math.cos(a) * r,
+              e.y + e.h / 2 + Math.sin(a) * r,
+              1
+            );
+          }
+          burst(e.x + 18, e.y + 11, "#ffd85e", 25);
+          addText(e.x + 18, e.y - 10, "BAT EXPLODED!", "#ffe18d");
+        } else {
+          addCoins(e.kind === "orc" ? 7 : 3);
+          burst(e.x + e.w / 2, e.y + e.h / 2, "#ffd85e", 12);
+        }
+
+        game.enemies.splice(i, 1);
+      }
+    }
+
+    // Fireballs can also be sliced.
+    for (let i = game.fireballs.length - 1; i >= 0; i--) {
+      const f = game.fireballs[i];
+      if (!f.groundFire && rectHit(hitbox, f)) {
+        burst(f.x + f.w / 2, f.y + f.h / 2, "#ffbd4a", 13);
+        game.score += 15;
+        addText(f.x, f.y - 5, "+15", "#ffcf63");
+        game.fireballs.splice(i, 1);
+        hitSomething = true;
+      }
+    }
+
+    // Dragon boss can be damaged by sword.
+    if (game.dragon && !game.dragon.dying && rectHit(hitbox, game.dragon)) {
+      const d = game.dragon;
+      if (d.hitCooldown <= 0) {
+        d.hp -= p.swordLevel >= 2 ? 2 : 1;
+        d.hitCooldown = 0.12;
+        burst(d.x + 120, d.y + 75, "#ff5565", 9);
+        addText(d.x + 115, d.y - 10, "HIT DRAGON!", "#ff7b7b");
+        hitSomething = true;
+
+        if (d.hp <= 0 && !d.dying) {
+          d.hp = 0;
+          d.dying = true;
+          d.deathTimer = d.deathMax;
+          d.deathBurstTimer = 0;
+          d.mode = "dead";
+          d.fireAnim = 1.4;
+          d.flameTime = 0;
+          d.fallAngle = 0;
+          addCoins(35);
+          addText(d.x + 105, d.y - 40, "DRAGON DEFEATED!", "#ffe18d");
+          addText(d.x + 105, d.y - 68, "BURST INTO FLAMES!", "#ff713f");
+          burst(d.x + 105, d.y + 70, "#ff7b2f", 24);
+        }
+      }
+    }
+
+    if (hitSomething) {
+      addText(p.x + 16, p.y - 28, "SLASH!", "#9ce8ff");
+    }
+  }
+
+  function update(dt) {
+    // Particles/text are updated in every state.
+    particles = particles.filter(pt => {
+      pt.life -= dt;
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      pt.vy += 250 * dt;
+      return pt.life > 0;
+    });
+
+    floatingTexts = floatingTexts.filter(t => {
+      t.life -= dt;
+      t.y -= 28 * dt;
+      return t.life > 0;
+    });
+
+    if (state !== "playing") return;
+
+    game.time += dt;
+    game.wave = 1 + Math.floor(game.time / 30);
+    game.damageCooldown = Math.max(0, game.damageCooldown - dt);
+
+    const p = game.player;
+    p.attackTimer = Math.max(0, p.attackTimer - dt);
+    p.attackCooldown = Math.max(0, p.attackCooldown - dt);
+    p.glowTimer = Math.max(0, p.glowTimer - dt);
+    p.shieldPulse = Math.max(0, p.shieldPulse - dt);
+
+    // Shield has a hard three-second maximum.
+    if (keys.ArrowDown && !p.shield && p.shieldTime <= 0) {
+      p.shield = true;
+      p.shieldTime = 3;
+    }
+
+    if (!keys.ArrowDown) {
+      p.shield = false;
+      p.shieldTime = 0;
+    }
+
+    if (p.shield) {
+      p.shieldTime -= dt;
+      if (p.shieldTime <= 0) {
+        p.shieldTime = 0;
+        p.shield = false;
+        keys.ArrowDown = false;
+        addText(p.x + 32, p.y - 20, "SHIELD EXPIRED!", "#ffe18d");
+      }
+    }
+
+    // Movement and facing.
+    const move = (keys.ArrowRight ? 1 : 0) - (keys.ArrowLeft ? 1 : 0);
+    p.vx = move * p.speed;
+    p.x = clamp(p.x + p.vx * dt, 20, W - p.w - 20);
+
+    // The knight cannot walk through the front of the grounded dragon.
+    if (game.dragon && !game.dragon.dying && game.dragon.mode !== "flying") {
+      const dragonWall = game.dragon.x + 140;
+      const minimumX = dragonWall + 4;
+      if (p.x < minimumX) {
+        p.x = minimumX;
+        if (p.vx < 0) p.vx = 0;
+      }
+    }
+
+    if (move !== 0) {
+      p.facing = move;
+      p.walkTimer += dt * 12;
+    } else {
+      p.walkTimer = 0;
+    }
+
+    // Up is the only jump trigger.
+    if (keys.ArrowUp && p.onGround) {
+      p.vy = -p.jumpPower;
+      p.onGround = false;
+      keys.ArrowUp = false;
+    }
+
+    p.vy += 1150 * dt;
+    p.y += p.vy * dt;
+
+    if (p.y >= GROUND_Y - p.h) {
+      p.y = GROUND_Y - p.h;
+      p.vy = 0;
+      p.onGround = true;
+    }
+
+    // Ground enemies are deliberately sparse and slow.
+    enemySpawnTimer -= dt;
+    if (enemySpawnTimer <= 0) {
+      spawnEnemy();
+      enemySpawnTimer = rand(2.2, 3.2);
+    }
+
+    // Bats are occasional.
+    batSpawnTimer -= dt;
+    if (batSpawnTimer <= 0) {
+      spawnBat();
+      batSpawnTimer = rand(5.5, 8.5);
+    }
+
+    fireballTimer -= dt;
+    if (fireballTimer <= 0) {
+      spawnFireball();
+      fireballTimer = rand(1.8, 2.8);
+    }
+
+    // Coins spawn less often now.
+    coinTimer -= dt;
+    if (coinTimer <= 0) {
+      spawnCoinPickup(rand(80, W - 80), rand(300, 405), 2);
+      coinTimer = rand(5.5, 8.0);
+    }
+
+    // Dragon boss enters on Wave 3. The old 25-defeat milestone is also preserved.
+    if (game.wave >= 3 && !game.dragon) {
+      spawnDragon();
+    }
+
+    // Dragon update: dramatic entrance, ground landing, aiming, roaring, wing flaps, and fire.
+    if (game.dragon) {
+      const d = game.dragon;
+      d.wingTimer += dt * (d.mode === 'flying' ? 11 : 6);
+      d.headBob += dt * 3.2;
+      d.breath += dt * 5;
+      d.roarTimer -= dt;
+      d.hitCooldown = Math.max(0, d.hitCooldown - dt);
+      d.roarPulse = Math.max(0, d.roarPulse - dt);
+      d.fireAnim = Math.max(0, d.fireAnim - dt);
+
+      if (d.mode === 'flying') {
+        d.flyTime += dt;
+        d.x += (d.targetX - d.x) * Math.min(1, dt * 0.9);
+        d.y += Math.sin(d.flyTime * 3) * 0.65;
+        if (d.x <= d.targetX + 10) {
+          d.mode = 'landing';
+          d.roarPulse = 1;
+          d.y = 145;
+          addText(d.x + 90, d.y - 48, 'ROOOOOAR!', '#ff5b68');
+        }
+      } else if (d.mode === 'landing') {
+        d.y += 125 * dt;
+        if (d.y >= d.groundY) {
+          d.y = d.groundY;
+          d.mode = 'ground';
+          d.landed = true;
+          burst(d.x + 90, GROUND_Y - 6, '#49313a', 20);
+        }
+      } else {
+        d.y = d.groundY + Math.sin(d.headBob) * 2;
+      }
+
+      // Aim the long neck/head toward the knight.
+      d.aim = Math.atan2((p.y + 12) - (d.y + 25), p.x - (d.x + 150));
+      d.aim = clamp(d.aim, -0.55, 0.55);
+
+      // Periodic roar.
+      if (d.roarTimer <= 0) {
+        d.roarPulse = 0.8;
+        d.roarTimer = rand(5, 7);
+        addText(d.x + 120, d.y - 50, 'ROAR!', '#ff5b68');
+      }
+
+      // Charge up and launch aimed fire after landing.
+      if (d.mode === 'ground' && d.fireAnim <= 0 && d.fireTimer > 0) d.fireTimer -= dt;
+      if (d.mode === 'ground' && d.fireTimer <= 0 && d.fireAnim <= 0) {
+        d.fireAnim = 0.6;
+        d.fireTimer = rand(3, 4.2);
+        d.fireShot = false;
+      }
+      if (d.fireAnim > 0) {
+        d.fireAnim -= dt;
+        if (d.fireAnim <= 0.30 && !d.fireShot) {
+          d.fireShot = true;
+          const angle = d.aim;
+          const mouthX = d.x + 184;
+          const mouthY = d.y + 47 + Math.sin(angle) * 18;
+          spawnFireball(mouthX, mouthY, Math.cos(angle) * 175, true);
+          const f = game.fireballs[game.fireballs.length - 1];
+          f.vy = Math.sin(angle) * 175;
+          burst(mouthX, mouthY, '#ff7b2f', 14);
+        }
+      }
+    }
+
+    // Enemies.
+    for (const e of game.enemies) {
+      e.pulse += dt * 6;
+
+      if (e.kind === "bat") {
+        e.phase += dt * 2.4;
+        e.y = e.baseY + Math.sin(e.phase) * 48;
+      }
+
+      if (e.knockback > 0) {
+        e.knockback -= dt;
+        e.x += p.facing * 130 * dt;
+      } else if (e.kind === "bat") {
+        e.x += e.dir * e.speed * dt;
+        if (Math.random() < dt * 0.28) e.dir *= -1;
+      } else {
+        const dir = p.x > e.x ? 1 : -1;
+        e.dir = dir;
+        e.x += dir * e.speed * (1 + game.wave * 0.01) * dt;
+      }
+
+      if (rectHit(p, e)) {
+        if (p.shield) {
+          e.x += p.facing * 180 * dt;
+          e.dir = p.facing;
+          e.knockback = 0.28;
+          p.shieldPulse = 0.2;
+        } else {
+          damagePlayer();
+        }
+      }
+    }
+
+    // Fireballs + dragon ground fire.
+    for (const f of game.fireballs) {
+      if (f.groundFire) {
+        f.life -= dt;
+        if (f.life <= 0) continue;
+
+        if (rectHit(p, f)) {
+          if (p.shield) {
+            p.shieldPulse = 0.2;
+          } else {
+            damagePlayer();
+          }
+        }
+        continue;
+      }
+
+      f.x += f.vx * dt;
+      f.y += f.vy * dt;
+      f.spin += dt * 8;
+      f.life -= dt;
+
+      if (rectHit(p, f)) {
+        if (p.shield) {
+          // Push a blocked fireball away from the shield.
+          f.vx = Math.abs(f.vx) * p.facing * 0.95;
+          f.x += p.facing * 18;
+          p.shieldPulse = 0.25;
+          addText(p.x + 30, p.y - 12, "BLOCK!", "#9ce8ff");
+          burst(p.x + 28, p.y + 18, "#9ce8ff", 7);
+        } else {
+          damagePlayer();
+
+          if (f.dragonFlame) {
+            // Dragon fire spreads and leaves a 10-second burning zone.
+            game.fireZones.push({
+              x: clamp(f.x - 55, 45, W - 180),
+              y: GROUND_Y - 20,
+              w: 170,
+              h: 24,
+              life: 10,
+              maxLife: 10
+            });
+            addText(p.x + 20, p.y - 32, "FIRE SPREAD!", "#ff8c43");
+          }
+
+          f.life = -1;
+        }
+      }
+    }
+
+    // Convert fire zones to collision objects.
+    game.fireZones = game.fireZones.filter(zone => {
+      zone.life -= dt;
+      if (zone.life <= 0) return false;
+
+      if (rectHit(p, zone)) {
+        if (!p.shield) damagePlayer();
+        else p.shieldPulse = 0.15;
+      }
+      return true;
+    });
+
+    // Pickup coins.
+    for (let i = game.coinsPickups.length - 1; i >= 0; i--) {
+      const c = game.coinsPickups[i];
+      c.bob += dt * 5;
+      c.y += Math.sin(c.bob) * 0.12;
+
+      if (rectHit(p, c)) {
+        addCoins(c.amount || 2);
+        burst(c.x + 7, c.y + 7, "#ffd85e", 9);
+        game.coinsPickups.splice(i, 1);
+      }
+    }
+
+    game.enemies = game.enemies.filter(e => e.x > -130 && e.x < W + 130);
+    game.fireballs = game.fireballs.filter(f => f.life > 0 && (f.dragonFlame || (f.x > -90 && f.x < W + 90)));
+  }
+
+  function drawText(text, x, y, size, color = "#fff", align = "left") {
+    ctx.font = "bold " + size + "px monospace";
+    ctx.textAlign = align;
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+  }
+
+  function drawBackground() {
+    ctx.fillStyle = "#0f1630";
+    ctx.fillRect(0, 0, W, H);
+
+    for (let i = 0; i < 65; i++) {
+      ctx.fillStyle = i % 3 === 0 ? "#8e9ac4" : "#3f4b76";
+      ctx.fillRect((i * 137) % W, (i * 73) % 255, 2, 2);
+    }
+
+    ctx.fillStyle = "#f6e7a6";
+    ctx.fillRect(755, 70, 42, 42);
+    ctx.fillStyle = "#0f1630";
+    ctx.fillRect(768, 62, 40, 40);
+
+    ctx.fillStyle = "#1b2142";
+    ctx.beginPath();
+    ctx.moveTo(0, 350);
+    for (let x = 0; x <= W; x += 80) {
+      ctx.lineTo(x, 290 + ((x / 80) % 2) * 60);
+    }
+    ctx.lineTo(W, GROUND_Y);
+    ctx.lineTo(0, GROUND_Y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Castle.
+    ctx.fillStyle = "#202540";
+    ctx.fillRect(80, 265, 115, 200);
+    ctx.fillRect(65, 240, 25, 225);
+    ctx.fillRect(195, 245, 25, 220);
+    ctx.fillRect(105, 225, 36, 40);
+    ctx.fillRect(142, 215, 36, 50);
+    ctx.fillStyle = "#6d789c";
+    ctx.fillRect(132, 330, 27, 55);
+    ctx.fillRect(102, 285, 14, 18);
+    ctx.fillRect(174, 285, 14, 18);
+
+    ctx.fillStyle = "#3f352d";
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+    ctx.fillStyle = "#6f5b3c";
+    ctx.fillRect(0, GROUND_Y, W, 8);
+
+    for (let x = 18; x < W; x += 58) {
+      ctx.fillStyle = "#564a40";
+      ctx.fillRect(x, GROUND_Y + 24, 18, 7);
+      ctx.fillRect(x + 22, GROUND_Y + 50, 30, 6);
+    }
+  }
+
+  function drawKnight() {
+    const p = game.player;
+    const x = Math.round(p.x);
+    const y = Math.round(p.y);
+
+    if (game.damageCooldown > 0 && Math.floor(game.damageCooldown * 12) % 2 === 0) {
+      return;
+    }
+
+    const moving = Math.abs(p.vx) > 1 && p.onGround;
+    const walk = moving ? Math.sin(p.walkTimer) : 0;
+    const bodyBob = moving ? Math.round(Math.abs(Math.sin(p.walkTimer)) * 2) : 0;
+
+    ctx.save();
+    ctx.translate(x + p.w / 2, y + bodyBob);
+    ctx.scale(p.facing, 1);
+
+    // Shadow.
+    ctx.save();
+    ctx.scale(p.facing, 1);
+    ctx.fillStyle = "rgba(0,0,0,.35)";
+    ctx.fillRect(-16, GROUND_Y - y - bodyBob + 4, 34, 7);
+    ctx.restore();
+
+    // Cape.
+    ctx.fillStyle = "#a52d3c";
+    ctx.fillRect(-17 - Math.round(walk * 2), 14, 8, 23);
+    ctx.fillRect(-21 - Math.round(walk * 3), 20, 9, 12);
+
+    // Body.
+    ctx.fillStyle = p.armorLevel >= 3 ? "#c5ccdc" : "#8e98b4";
+    ctx.fillRect(-9, 13, 18, 16);
+    ctx.fillStyle = "#2f3550";
+    ctx.fillRect(-5, 25, 11, 5);
+
+    // Legs/boots animate while moving.
+    const stepA = Math.round(walk * 4);
+    const stepB = -stepA;
+
+    ctx.fillStyle = "#626b87";
+    ctx.fillRect(-8 + stepA, 29, 6, 11);
+    ctx.fillRect(4 + stepB, 29, 6, 11);
+
+    ctx.fillStyle = "#20253a";
+    ctx.fillRect(-10 + stepA, 39, 9, 4);
+    ctx.fillRect(3 + stepB, 39, 9, 4);
+
+    // Helmet faces forward direction after mirroring.
+    ctx.fillStyle = "#c7cfdf";
+    ctx.fillRect(-10, 0, 20, 16);
+    ctx.fillStyle = "#7b849d";
+    ctx.fillRect(-6, -4, 12, 5);
+    ctx.fillRect(0, -8, 4, 4);
+
+    ctx.fillStyle = "#252a3d";
+    ctx.fillRect(6, 5, 7, 7);
+    ctx.fillRect(-1, 6, 3, 3);
+
+    // Sword is completely invisible while shield is up.
+    if (!p.shield) {
+      const swordLength = 30 + p.swordLevel * 4;
+      const handX = 11;
+      const handY = 18;
+      let swordAngle = -0.10;
+
+      if (p.attackTimer > 0) {
+        const progress = 1 - p.attackTimer / 0.30;
+        const eased =
+          progress < 0.5
+            ? 2 * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+        swordAngle = -1.45 + eased * 2.45;
+      } else if (moving) {
+        swordAngle = -0.10 + walk * 0.07;
+      }
+
+      ctx.save();
+      ctx.translate(handX, handY);
+      ctx.rotate(swordAngle);
+
+      if (p.attackTimer > 0 || p.glowTimer > 0) {
+        ctx.shadowColor = "#72e9ff";
+        ctx.shadowBlur = p.attackTimer > 0 ? 24 : 14;
+      }
+
+      ctx.fillStyle = "#f6ce63";
+      ctx.fillRect(-3, -8, 6, 16);
+
+      ctx.fillStyle = "#8b6339";
+      ctx.fillRect(-5, -2, 8, 4);
+
+      ctx.fillStyle = "#f8fbff";
+      ctx.fillRect(2, -3, swordLength, 6);
+
+      ctx.fillStyle = "#c9f7ff";
+      ctx.fillRect(5, -3, swordLength - 5, 2);
+
+      ctx.restore();
+
+      // Sword swing trail.
+      if (p.attackTimer > 0) {
+        const progress = 1 - p.attackTimer / 0.30;
+        const eased =
+          progress < 0.5
+            ? 2 * progress * progress
+            : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+        const angle = -1.45 + eased * 2.45;
+
+        ctx.save();
+        ctx.translate(handX, handY);
+
+        ctx.beginPath();
+        ctx.arc(0, 0, swordLength + 5, angle - 0.50, angle + 0.08);
+        ctx.lineWidth = 9;
+        ctx.strokeStyle = "rgba(114,233,255,.20)";
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, swordLength + 4, angle - 0.41, angle + 0.05);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#8defff";
+        ctx.shadowColor = "#72e9ff";
+        ctx.shadowBlur = 18;
+        ctx.stroke();
+
+        ctx.restore();
+      }
+    }
+
+    // Shield.
+    if (p.shield) {
+      ctx.save();
+      ctx.shadowColor = "#72dfff";
+      ctx.shadowBlur = p.shieldPulse > 0 ? 20 : 9;
+
+      ctx.fillStyle = "#617496";
+      ctx.fillRect(14, 2, 9, 31);
+
+      ctx.fillStyle = "#9ce8ff";
+      ctx.fillRect(16, 5, 5, 25);
+
+      ctx.fillStyle = "#d7eaff";
+      ctx.fillRect(21, 12, 4, 12);
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  function drawHealthBar(enemy) {
+    ctx.fillStyle = "#261c24";
+    ctx.fillRect(enemy.x, enemy.y - 9, enemy.w, 4);
+    ctx.fillStyle = "#ff6464";
+    ctx.fillRect(
+      enemy.x,
+      enemy.y - 9,
+      enemy.w * (enemy.hp / enemy.maxHp),
+      4
+    );
+  }
+
+  function drawSlime(e) {
+    const squish = Math.sin(e.pulse) * 2;
+    ctx.fillStyle = "#5bd26a";
+    ctx.fillRect(e.x, e.y + 7 + squish, e.w, e.h - 7);
+
+    ctx.fillStyle = "#17331c";
+    ctx.fillRect(e.x + 7, e.y + 10, 4, 5);
+    ctx.fillRect(e.x + 19, e.y + 10, 4, 5);
+
+    ctx.fillStyle = "#b0ff92";
+    ctx.fillRect(e.x + 6, e.y + 3, 7, 4);
+
+    drawHealthBar(e);
+  }
+
+  function drawOrc(e) {
+    const x = Math.round(e.x);
+    const y = Math.round(e.y);
+
+    ctx.fillStyle = "#647b49";
+    ctx.fillRect(x + 5, y + 10, 22, 30);
+    ctx.fillRect(x + 1, y + 20, 6, 18);
+    ctx.fillRect(x + 25, y + 20, 6, 18);
+
+    ctx.fillStyle = "#889d62";
+    ctx.fillRect(x + 3, y, e.w - 5, 16);
+
+    ctx.fillStyle = "#23261f";
+    ctx.fillRect(x + 8, y + 6, 4, 4);
+    ctx.fillRect(x + 19, y + 6, 4, 4);
+
+    ctx.fillStyle = "#f0cf8b";
+    ctx.fillRect(x + 10, y + 13, 12, 3);
+
+    ctx.fillStyle = "#3c302b";
+    ctx.fillRect(x, y + 41, 11, 5);
+    ctx.fillRect(x + 21, y + 41, 11, 5);
+
+    drawHealthBar(e);
+  }
+
+  function drawBat(e) {
+    const flap = Math.sin(e.pulse) * 5;
+
+    ctx.fillStyle = "#6f5aa0";
+    ctx.fillRect(e.x + 12, e.y + 5, 14, 13);
+
+    ctx.fillStyle = "#9a76d1";
+    ctx.fillRect(e.x + 5, e.y + 2 - flap, 8, 12);
+    ctx.fillRect(e.x + 25, e.y + 2 - flap, 8, 12);
+
+    ctx.fillStyle = "#4a386d";
+    ctx.fillRect(e.x + 15, e.y + 2, 8, 20);
+
+    ctx.fillStyle = "#ff6978";
+    ctx.fillRect(e.x + 15, e.y + 9, 3, 3);
+    ctx.fillRect(e.x + 21, e.y + 9, 3, 3);
+  }
+
+  function drawFireball(f) {
+    ctx.save();
+    ctx.translate(f.x + f.w / 2, f.y + f.h / 2);
+    ctx.rotate(f.spin);
+
+    ctx.shadowColor = "#ff6b35";
+    ctx.shadowBlur = 16;
+
+    ctx.fillStyle = "#ffdb61";
+    ctx.fillRect(-5, -5, 10, 10);
+
+    ctx.fillStyle = "#ff7b2f";
+    ctx.fillRect(-8, -3, 16, 7);
+
+    ctx.fillStyle = "#db3e2f";
+    ctx.fillRect(-4, -8, 8, 16);
+
+    ctx.restore();
+  }
+
+  function drawFireZone(zone) {
+    const flicker = Math.sin(performance.now() * 0.018 + zone.x) * 3;
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+
+    for (let x = zone.x; x < zone.x + zone.w; x += 18) {
+      ctx.fillStyle = "#db3e2f";
+      ctx.fillRect(x, GROUND_Y - 8, 14, 8);
+
+      ctx.fillStyle = "#ff7b2f";
+      ctx.fillRect(x + 3, GROUND_Y - 18 - flicker, 8, 12);
+
+      ctx.fillStyle = "#ffdb61";
+      ctx.fillRect(x + 5, GROUND_Y - 15 - flicker, 4, 7);
+    }
+
+    ctx.restore();
+  }
+
+  function drawDragonAshes() {
+    for (const ash of game.dragonAshes) {
+      const settle = Math.min(1, ash.age / 1.5);
+      ctx.save();
+      ctx.globalAlpha = 0.90;
+      ctx.fillStyle = "#29262b";
+      ctx.fillRect(ash.x, ash.y, ash.w, 8);
+      ctx.fillStyle = "#4a4241";
+      ctx.fillRect(ash.x + 14, ash.y - 5 * settle, ash.w - 28, 8);
+      ctx.fillStyle = "#71605a";
+      ctx.fillRect(ash.x + 45, ash.y - 9 * settle, 64, 5);
+
+      // Charred bones and horn fragments.
+      ctx.fillStyle = "#17151a";
+      ctx.fillRect(ash.x + 23, ash.y - 13, 39, 5);
+      ctx.fillRect(ash.x + 114, ash.y - 17, 9, 17);
+      ctx.fillRect(ash.x + 132, ash.y - 8, 25, 4);
+
+      // Tiny glowing embers.
+      if (ash.age < 8) {
+        ctx.fillStyle = "#d94f2f";
+        ctx.fillRect(ash.x + 38, ash.y - 3, 4, 4);
+        ctx.fillRect(ash.x + 98, ash.y - 4, 3, 3);
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawDragon() {
+    const d = game.dragon;
+    if (!d) return;
+
+    const wing = Math.sin(d.wingTimer) * (d.mode === "flying" ? 20 : 12);
+    const flap = Math.cos(d.wingTimer * 0.8) * 5;
+    const roar = d.roarPulse > 0 ? 7 + Math.sin(d.roarPulse * 30) * 3 : 0;
+    const neckSway = Math.sin(d.breath) * 4;
+    const lift = d.mode === "flying" ? Math.sin(d.wingTimer * 0.55) * 5 : 0;
+    const deathProgress = d.dying ? 1 - d.deathTimer / d.deathMax : 0;
+
+    ctx.save();
+    ctx.translate(d.x, d.y + lift + (d.dying ? deathProgress * 48 : 0));
+
+    if (d.dying) {
+      ctx.translate(95, 82);
+      ctx.rotate(Math.min(0.46, d.fallAngle));
+      ctx.translate(-95, -82);
+      ctx.globalAlpha = Math.max(0.25, 1 - deathProgress * 0.52);
+    }
+
+    // Ground shadow.
+    ctx.save();
+    const shadowScale = d.mode === "flying" ? 0.72 : 1;
+    ctx.globalAlpha = d.mode === "flying" ? 0.23 : 0.42;
+    ctx.fillStyle = "#000";
+    ctx.fillRect(4, 145, 208 * shadowScale, 11);
+    ctx.restore();
+
+    // Back wing.
+    ctx.fillStyle = "#15151d";
+    ctx.beginPath();
+    ctx.moveTo(50, 42);
+    ctx.lineTo(-42, -60 - wing);
+    ctx.lineTo(2, 92);
+    ctx.lineTo(56, 72);
+    ctx.closePath();
+    ctx.fill();
+
+    // Back wing membrane ribs.
+    ctx.strokeStyle = "#403a48";
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(45, 48);
+      ctx.lineTo(-20 + i * 12, -38 - wing * (0.7 - i * 0.06));
+      ctx.stroke();
+    }
+
+    // Main body.
+    ctx.fillStyle = "#0f0f16";
+    ctx.fillRect(30, 47, 105, 73);
+
+    // Layered scales on body.
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 6; col++) {
+        const sx = 38 + col * 15 + (row % 2) * 7;
+        const sy = 58 + row * 14;
+        ctx.fillStyle = (row + col) % 2 ? "#24212b" : "#302b37";
+        ctx.fillRect(sx, sy, 8, 7);
+      }
+    }
+
+    // Belly plates.
+    ctx.fillStyle = "#3b3541";
+    for (let i = 0; i < 6; i++) {
+      ctx.fillRect(70 + i * 8, 54 + i * 7, 6, 13);
+    }
+
+    // Tail.
+    ctx.fillStyle = "#0b0b11";
+    ctx.beginPath();
+    ctx.moveTo(47, 105);
+    ctx.lineTo(-55, 139);
+    ctx.lineTo(48, 128);
+    ctx.lineTo(78, 111);
+    ctx.closePath();
+    ctx.fill();
+
+    // Tail spikes.
+    ctx.fillStyle = "#5a5360";
+    for (let i = 0; i < 3; i++) {
+      ctx.fillRect(-35 + i * 21, 119 - i * 3, 10, 8);
+    }
+
+    // Legs with claws.
+    ctx.fillStyle = "#0a0a10";
+    ctx.fillRect(37, 104, 27, 34);
+    ctx.fillRect(100, 104, 27, 34);
+    ctx.fillStyle = "#5a525f";
+    ctx.fillRect(30, 130, 38, 8);
+    ctx.fillRect(93, 130, 38, 8);
+    ctx.fillStyle = "#8a7a86";
+    ctx.fillRect(35, 137, 7, 4);
+    ctx.fillRect(49, 137, 7, 4);
+    ctx.fillRect(98, 137, 7, 4);
+    ctx.fillRect(112, 137, 7, 4);
+
+    // Long neck aiming at the knight.
+    ctx.save();
+    ctx.translate(111, 55);
+    ctx.rotate(d.aim * 0.34 + neckSway * 0.008);
+
+    ctx.fillStyle = "#101017";
+    ctx.fillRect(0, -8, 23, 81);
+    ctx.fillRect(9, -20, 24, 32);
+
+    // Neck scales/ridges.
+    for (let i = 0; i < 6; i++) {
+      ctx.fillStyle = i % 2 ? "#3b3542" : "#28242f";
+      ctx.fillRect(2 + (i % 2) * 3, -2 + i * 12, 12, 5);
+    }
+
+    // Small neck spikes.
+    ctx.fillStyle = "#5a5360";
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(0, 4 + i * 16, 7, 7);
+    }
+
+    // Head.
+    ctx.fillStyle = "#111118";
+    ctx.fillRect(15, -40 - roar, 62, 57 + roar);
+    ctx.fillRect(48, -7 - roar, 36, 23 + roar);
+
+    // Brow ridges.
+    ctx.fillStyle = "#25212b";
+    ctx.fillRect(27, -26 - roar, 18, 7);
+    ctx.fillRect(50, -26 - roar, 18, 7);
+
+    // Horns.
+    ctx.fillStyle = "#5a5260";
+    ctx.fillRect(24, -57 - roar, 10, 23);
+    ctx.fillRect(55, -61 - roar, 10, 24);
+
+    // Horn highlights.
+    ctx.fillStyle = "#857988";
+    ctx.fillRect(25, -55 - roar, 3, 10);
+    ctx.fillRect(56, -59 - roar, 3, 11);
+
+    // Red eyes.
+    ctx.fillStyle = "#ff2638";
+    ctx.shadowColor = "#ff2638";
+    ctx.shadowBlur = 16;
+    ctx.fillRect(32, -20 - roar, 8, 6);
+    ctx.fillRect(56, -20 - roar, 8, 6);
+    ctx.shadowBlur = 0;
+
+    // Nose ridges.
+    ctx.fillStyle = "#3a3440";
+    ctx.fillRect(68, -2 - roar, 11, 5);
+    ctx.fillRect(76, 3 - roar, 8, 4);
+
+    // Mouth/jaw.
+    ctx.fillStyle = "#5a1a27";
+    ctx.fillRect(64, 0 - roar, 25, 10 + roar);
+    ctx.fillStyle = "#21131b";
+    ctx.fillRect(62, 5 - roar, 29, 8 + roar);
+
+    // SHARP TEETH.
+    ctx.fillStyle = "#f1ece2";
+    const teethTop = [
+      [66, 1], [72, 1], [78, 2], [84, 2]
+    ];
+    for (const tooth of teethTop) {
+      ctx.beginPath();
+      ctx.moveTo(tooth[0], 6 - roar);
+      ctx.lineTo(tooth[0] + 3, 6 - roar);
+      ctx.lineTo(tooth[0] + 1.5, 12 - roar);
+      ctx.closePath();
+      ctx.fill();
+    }
+    const teethBottom = [
+      [68, 13], [74, 13], [80, 13], [85, 12]
+    ];
+    for (const tooth of teethBottom) {
+      ctx.beginPath();
+      ctx.moveTo(tooth[0], 12 - roar);
+      ctx.lineTo(tooth[0] + 3, 12 - roar);
+      ctx.lineTo(tooth[0] + 1.5, 18 - roar);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Roar waves.
+    if (d.roarPulse > 0) {
+      ctx.strokeStyle = "rgba(255,90,105,.72)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(80, 6, 19 + roar * .9, -0.8, 0.8);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(84, 6, 30 + roar * 1.2, -0.65, 0.65);
+      ctx.stroke();
+    }
+
+    // Fire animation.
+    if (d.fireAnim > 0 && !d.dying) {
+      const fireProgress = 1 - d.fireAnim / 0.6;
+      const flame = 12 + fireProgress * 34;
+
+      ctx.shadowColor = "#ff6b35";
+      ctx.shadowBlur = 20;
+
+      ctx.fillStyle = "#db3e2f";
+      ctx.fillRect(80, 1, flame, 14);
+
+      ctx.fillStyle = "#ff7b2f";
+      ctx.fillRect(84, 3, flame * 0.75, 10);
+
+      ctx.fillStyle = "#ffdb61";
+      ctx.fillRect(87, 5, flame * 0.47, 7);
+
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.restore();
+
+    // Front wing.
+    ctx.fillStyle = "#1a1822";
+    ctx.beginPath();
+    ctx.moveTo(76, 48);
+    ctx.lineTo(173, -62 + wing * 0.9);
+    ctx.lineTo(149, 57 + flap);
+    ctx.lineTo(118, 86);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wing membrane details.
+    ctx.strokeStyle = "#4a4352";
+    ctx.lineWidth = 3;
+    const wingTopY = -62 + wing * 0.9;
+    ctx.beginPath();
+    ctx.moveTo(79, 49);
+    ctx.lineTo(173, wingTopY);
+    ctx.moveTo(90, 59);
+    ctx.lineTo(159, wingTopY + 30);
+    ctx.moveTo(102, 68);
+    ctx.lineTo(149, wingTopY + 57);
+    ctx.moveTo(115, 77);
+    ctx.lineTo(143, wingTopY + 75);
+    ctx.stroke();
+
+    // Front wing spikes.
+    ctx.fillStyle = "#625868";
+    ctx.fillRect(168, wingTopY, 12, 6);
+    ctx.fillRect(158, wingTopY + 27, 10, 6);
+
+    // Burning death overlay: entire dragon erupts in flames.
+    if (d.dying) {
+      const flicker = d.flameTime;
+
+      for (let i = 0; i < 13; i++) {
+        const fx = 8 + ((i * 17) % 170);
+        const wave = Math.sin(flicker + i * 1.4) * 5;
+        const fy = 115 - (Math.abs(Math.sin(flicker * 0.55 + i)) * 30);
+
+        ctx.fillStyle = i % 2 ? "#ff7b2f" : "#db3e2f";
+        ctx.fillRect(fx, fy - wave, 13, 27);
+
+        ctx.fillStyle = "#ffdb61";
+        ctx.fillRect(fx + 4, fy + 4 - wave, 5, 14);
+      }
+
+      // Fire corona around head and wings.
+      ctx.fillStyle = "#ff8b3d";
+      ctx.fillRect(147, -58 - Math.sin(flicker) * 8, 9, 24);
+      ctx.fillRect(169, -44 + Math.cos(flicker) * 9, 8, 24);
+      ctx.fillRect(-11, -40 + Math.sin(flicker * .8) * 7, 9, 21);
+
+      // Smoke.
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = "#3a3539";
+      for (let i = 0; i < 7; i++) {
+        const sx = 20 + i * 28 + Math.sin(flicker + i) * 8;
+        const sy = -35 - deathProgress * 48 - i * 6;
+        ctx.fillRect(sx, sy, 18 + i * 2, 14 + i);
+      }
+      ctx.globalAlpha = 1;
+
+      drawText("BURNING!", 93, -104, 16, "#ff8a52", "center");
+    }
+
+    // Boss health bar (hide once fully dead).
+    if (!d.dying) {
+      ctx.fillStyle = "rgba(8,8,18,.86)";
+      ctx.fillRect(-28, -76, 240, 25);
+      ctx.fillStyle = "#ef3340";
+      ctx.fillRect(-20, -67, 220 * (d.hp / d.maxHp), 10);
+      drawText("DRAGON BOSS", -20, -74, 11, "#ff7777");
+    }
+
+    if (!d.dying) {
+      if (d.mode === "flying") {
+        drawText("FLYING IN!", 76, -92, 14, "#ff8a63", "center");
+      } else if (d.mode === "landing") {
+        drawText("LANDING!", 78, -92, 14, "#ff8a63", "center");
+      } else if (d.roarPulse > 0) {
+        drawText("ROOOOOAR!", 90, -101, 17, "#ff5b68", "center");
+      } else if (d.fireAnim > 0) {
+        drawText("FIRE!", 151, -84, 15, "#ff9a52", "center");
+      }
+    }
+
+    ctx.restore();
+  }
+
+  function drawCoin(c) {
+    ctx.fillStyle = "#b78622";
+    ctx.fillRect(c.x, c.y, 15, 15);
+
+    ctx.fillStyle = "#ffe16d";
+    ctx.fillRect(c.x + 3, c.y + 1, 9, 13);
+
+    ctx.fillStyle = "#fff0a1";
+    ctx.fillRect(c.x + 6, c.y + 3, 3, 9);
+  }
+
+  function drawHUD() {
+    ctx.fillStyle = "rgba(8,8,18,.82)";
+    ctx.fillRect(12, 12, 315, 67);
+    ctx.strokeStyle = "#665b74";
+    ctx.strokeRect(12, 12, 315, 67);
+
+    drawText("HEARTS", 23, 27, 14, "#ddd");
+
+    for (let i = 0; i < MAX_HEARTS; i++) {
+      ctx.fillStyle = i < game.hearts ? "#ff5364" : "#37283b";
+      ctx.fillRect(20 + i * 26, 43, 19, 14);
+    }
+
+    ctx.fillStyle = "rgba(8,8,18,.82)";
+    ctx.fillRect(W - 255, 12, 243, 67);
+    ctx.strokeStyle = "#665b74";
+    ctx.strokeRect(W - 255, 12, 243, 67);
+
+    drawText("COINS: " + game.coins, W - 240, 30, 17, "#ffd85e");
+    drawText(
+      "WAVE: " + game.wave + "  SCORE: " + game.score,
+      W - 240,
+      56,
+      13,
+      "#fff"
+    );
+
+    // Boss progress reminder.
+    if (!game.dragon && game.wave < game.dragonNextWave) {
+      if (game.dragonNextWave === 3) {
+        drawText("DRAGON AT WAVE 3", W / 2, 28, 12, "#ddd", "center");
+      } else {
+        drawText("DRAGON RETURNS: WAVE " + game.dragonNextWave, W / 2, 28, 12, "#a99b94", "center");
+      }
+    }
+  }
+
+  function drawEffects() {
+    for (const pt of particles) {
+      ctx.globalAlpha = clamp(pt.life / pt.maxLife, 0, 1);
+      ctx.fillStyle = pt.color;
+      ctx.fillRect(pt.x, pt.y, pt.size, pt.size);
+    }
+
+    ctx.globalAlpha = 1;
+
+    for (const t of floatingTexts) {
+      ctx.globalAlpha = clamp(t.life / t.maxLife, 0, 1);
+      drawText(t.text, t.x, t.y, 13, t.color, "center");
+    }
+
+    ctx.globalAlpha = 1;
+  }
+
+  function drawTitle() {
+    drawBackground();
+
+    ctx.fillStyle = "rgba(6,8,18,.72)";
+    ctx.fillRect(120, 85, 720, 375);
+
+    ctx.strokeStyle = "#d8c57a";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(120, 85, 720, 375);
+
+    drawText("YOUNG KNIGHT", W / 2, 145, 50, "#f3d66e", "center");
+    drawText("", W / 2, 195, 30, "#9ce8ff", "center");
+    drawText(
+      "35 COINS • 10 HEARTS • DRAGON BOSS AT WAVE 3",
+      W / 2,
+      242,
+      13,
+      "#fff",
+      "center"
+    );
+    drawText(
+      "← → MOVE   ↑ JUMP   ↓ SHIELD (3 SEC MAX)",
+      W / 2,
+      280,
+      14,
+      "#ddd",
+      "center"
+    );
+    drawText(
+      "SPACE = GLOWING SWORD SWIPE",
+      W / 2,
+      310,
+      14,
+      "#ddd",
+      "center"
+    );
+    drawText(
+      "SLIMES • ORCS • BATS • FIREBALLS • DRAGON",
+      W / 2,
+      340,
+      13,
+      "#aaa",
+      "center"
+    );
+    drawText(
+      "PRESS ENTER TO START",
+      W / 2,
+      405,
+      21,
+      "#ffe18d",
+      "center"
+    );
+  }
+
+  function drawShop() {
+    drawBackground();
+
+    ctx.fillStyle = "rgba(8,8,18,.84)";
+    ctx.fillRect(125, 85, 710, 375);
+
+    ctx.strokeStyle = "#d8c57a";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(125, 85, 710, 375);
+
+    drawText("KNIGHT'S SHOP", W / 2, 132, 35, "#f3d66e", "center");
+    drawText("COINS: " + game.coins, W / 2, 168, 18, "#ffd85e", "center");
+
+    const swordCost = 30 + (game.player.swordLevel - 1) * 20;
+    const armorCost = 35 + (game.player.armorLevel - 1) * 25;
+
+    ctx.fillStyle = "#191d33";
+    ctx.fillRect(175, 205, 270, 170);
+    ctx.fillRect(515, 205, 270, 170);
+
+    ctx.strokeStyle = "#4b5675";
+    ctx.strokeRect(175, 205, 270, 170);
+    ctx.strokeRect(515, 205, 270, 170);
+
+    drawText("GLOWING SWORD", 310, 235, 18, "#9ce8ff", "center");
+    drawText("LEVEL " + game.player.swordLevel, 310, 264, 16, "#fff", "center");
+    drawText("MORE DAMAGE + SWIPE REACH", 310, 292, 12, "#aaa", "center");
+    drawText(
+      game.player.swordLevel >= 6 ? "MAXED" : "S = BUY FOR " + swordCost,
+      310, 334, 17, "#ffe18d", "center"
+    );
+
+    drawText("ARMOR", 650, 235, 18, "#ffe18d", "center");
+    drawText("LEVEL " + game.player.armorLevel, 650, 264, 16, "#fff", "center");
+    drawText("MORE SURVIVABILITY + HEART", 650, 292, 12, "#aaa", "center");
+    drawText(
+      game.player.armorLevel >= 5 ? "MAXED" : "A = BUY FOR " + armorCost,
+      650, 334, 17, "#ffe18d", "center"
+    );
+
+    drawText("ENTER = RETURN TO BATTLE", W / 2, 420, 17, "#ddd", "center");
+  }
+
+  function drawGameOver() {
+    drawBackground();
+
+    ctx.fillStyle = "rgba(16,8,18,.82)";
+    ctx.fillRect(170, 105, 620, 330);
+
+    ctx.strokeStyle = "#a94355";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(170, 105, 620, 330);
+
+    drawText("GAME OVER", W / 2, 175, 46, "#ff6873", "center");
+    drawText("THE MONSTERS GOT YOU.", W / 2, 220, 17, "#fff", "center");
+    drawText("SCORE: " + game.score, W / 2, 265, 20, "#ffe18d", "center");
+    drawText("COINS: " + game.coins, W / 2, 298, 18, "#ffd85e", "center");
+    drawText("ENEMIES DEFEATED: " + game.enemiesDefeated, W / 2, 331, 15, "#ddd", "center");
+    drawText("PRESS ENTER TO RESTART", W / 2, 390, 21, "#9ce8ff", "center");
+  }
+
+  function drawPlaying() {
+    drawBackground();
+
+    for (const zone of game.fireZones) {
+      drawFireZone(zone);
+    }
+
+    drawDragonAshes();
+
+    for (const c of game.coinsPickups) {
+      drawCoin(c);
+    }
+
+    for (const e of game.enemies) {
+      if (e.kind === "slime") drawSlime(e);
+      else if (e.kind === "orc") drawOrc(e);
+      else drawBat(e);
+    }
+
+    for (const f of game.fireballs) {
+      drawFireball(f);
+    }
+
+    drawDragon();
+    drawKnight();
+    drawHUD();
+    drawEffects();
+
+    ctx.fillStyle = "rgba(8,8,18,.75)";
+    ctx.fillRect(W / 2 - 245, H - 58, 490, 43);
+
+    if (game.player.shield) {
+      drawText(
+        "SHIELD: " + game.player.shieldTime.toFixed(1) + "s",
+        W / 2,
+        H - 46,
+        11,
+        "#9ce8ff",
+        "center"
+      );
+    } else {
+      drawText("SHIELD READY", W / 2, H - 46, 11, "#aaa", "center");
+    }
+
+    drawText(
+      "SPACE ATTACK • ↑ JUMP • ↓ SHIELD • A SHOP",
+      W / 2,
+      H - 27,
+      11,
+      "#ddd",
+      "center"
+    );
+  }
+
+  function render() {
+    ctx.clearRect(0, 0, W, H);
+
+    if (state === "title") drawTitle();
+    else if (state === "playing") drawPlaying();
+    else if (state === "shop") drawShop();
+    else if (state === "gameover") drawGameOver();
+  }
+
+  window.addEventListener("keydown", event => {
+    const code = event.code;
+    const key = event.key;
+
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Space"].includes(code)) {
+      event.preventDefault();
+    }
+
+    keys[key] = true;
+    keys[code] = true;
+
+    if ((state === "title" || state === "gameover") && key === "Enter") {
+      startGame();
+    } else if (state === "playing" && code === "Space") {
+      attack();
+    } else if (state === "playing" && key.toLowerCase() === "a") {
+      state = "shop";
+    } else if (state === "shop" && key.toLowerCase() === "s") {
+      buySword();
+    } else if (state === "shop" && key.toLowerCase() === "a") {
+      buyArmor();
+    } else if (state === "shop" && key === "Enter") {
+      state = "playing";
+    }
+  });
+
+  window.addEventListener("keyup", event => {
+    keys[event.key] = false;
+    keys[event.code] = false;
+  });
+
+  function buySword() {
+    const p = game.player;
+    const cost = 30 + (p.swordLevel - 1) * 20;
+
+    if (p.swordLevel >= 6) {
+      addText(W / 2, 330, "SWORD MAXED!", "#9ce8ff");
+    } else if (game.coins >= cost) {
+      game.coins -= cost;
+      p.swordLevel++;
+      p.glowTimer = 0.7;
+      addText(W / 2, 330, "SWORD UPGRADED!", "#9ce8ff");
+    } else {
+      addText(W / 2, 330, "NOT ENOUGH COINS", "#ff7777");
+    }
+  }
+
+  function buyArmor() {
+    const p = game.player;
+    const cost = 35 + (p.armorLevel - 1) * 25;
+
+    if (p.armorLevel >= 5) {
+      addText(W / 2, 350, "ARMOR MAXED!", "#ffe18d");
+    } else if (game.coins >= cost) {
+      game.coins -= cost;
+      p.armorLevel++;
+      game.hearts = Math.min(MAX_HEARTS, game.hearts + 1);
+      p.glowTimer = 0.7;
+      addText(W / 2, 350, "ARMOR UPGRADED!", "#ffe18d");
+    } else {
+      addText(W / 2, 350, "NOT ENOUGH COINS", "#ff7777");
+    }
+  }
+
+  resetGame();
+
+  requestAnimationFrame(function loop(now) {
+    const dt = Math.min(0.033, Math.max(0, (now - lastTime) / 1000));
+    lastTime = now;
+    update(dt);
+    render();
+    requestAnimationFrame(loop);
+  });
+})();
+</script>
+</body>
+</html>

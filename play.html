@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Play &ndash; PP7 Deacon's Quorum Arcade</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="playpage">
+<div class="bar">
+  <a href="./">&larr; Back to Arcade</a>
+  <span class="t" id="title"></span>
+  <span class="m" id="maker"></span>
+  <a id="direct" href="#" target="_blank" rel="noopener">Open full page &#8599;</a>
+</div>
+<iframe id="frame" title="Game" allow="autoplay; fullscreen; gamepad" allowfullscreen></iframe>
+<script src="games.js"></script>
+<script>
+  const slug = new URLSearchParams(location.search).get("g");
+  const game = window.GAMES.find(g => g.slug === slug);
+  if (!game) { location.replace("./"); }
+  else {
+    document.title = game.title + " \u2013 PP7 Deacon's Quorum Arcade";
+    document.getElementById("title").textContent = game.title;
+    document.getElementById("maker").textContent = game.maker ? "by " + game.maker : "";
+    const src = "games/" + game.slug + ".html";
+    document.getElementById("direct").href = src;
+    const f = document.getElementById("frame");
+    const focusGame = () => { try { f.focus(); f.contentWindow.focus(); } catch (e) {} };
+    f.addEventListener("load", focusGame);
+    f.src = src;
+    // Give focus back to the game if the player clicks the top bar background.
+    document.querySelector(".bar").addEventListener("click", e => { if (e.target.tagName !== "A") focusGame(); });
+  }
+</script>
+</body>
+</html>

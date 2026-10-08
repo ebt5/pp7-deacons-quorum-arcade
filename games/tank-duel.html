@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tank Duel - Scorched Earth Style</title>
+<style>
+  :root{
+    --bg:#10131a; --panel:#1b2130; --panel2:#242c3f; --text:#f2f5ff;
+    --accent:#ffcc66; --danger:#ff6868; --good:#75e58a; --muted:#9ba6bc;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:radial-gradient(circle at top,#1d2636,#0d1016 70%);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  body{padding:16px;overflow-x:hidden}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{margin:0 0 6px;text-align:center;font-size:clamp(28px,5vw,48px);letter-spacing:2px}
+  .sub{text-align:center;color:var(--muted);margin-bottom:14px}
+  .gamebox{background:rgba(18,22,31,.92);border:1px solid #364055;border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.35);padding:12px}
+  canvas{display:block;width:100%;height:auto;background:#8bc8ef;border-radius:12px;touch-action:none}
+  .hud{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:center;padding:10px 2px}
+  .card{background:var(--panel);border:1px solid #39445c;border-radius:12px;padding:10px}
+  .tankinfo{display:flex;align-items:center;gap:10px}
+  .tankname{font-weight:800}
+  .healthbar{width:160px;height:12px;background:#0e1118;border-radius:20px;overflow:hidden;border:1px solid #3d4555}
+  .healthfill{height:100%;width:100%;background:var(--good);transition:width .2s}
+  .turn{font-weight:900;text-align:center;background:var(--panel2);padding:10px 16px;border-radius:12px;border:1px solid #49556e}
+  .right{text-align:right}
+  .controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+  .control{background:var(--panel);border:1px solid #39445c;border-radius:12px;padding:10px}
+  label{display:block;font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.8px}
+  input[type=range]{width:100%}
+  select,button{width:100%;font:inherit}
+  select{background:#0f141d;color:var(--text);border:1px solid #48536a;border-radius:9px;padding:9px}
+  .value{font-weight:900;color:var(--accent);float:right}
+  .buttons{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  button{border:0;border-radius:11px;padding:12px 14px;font-weight:900;cursor:pointer;transition:transform .08s,filter .12s}
+  button:hover{filter:brightness(1.08)}
+  button:active{transform:translateY(1px)}
+  .fire{background:#ff9d3c;color:#241607}
+  .restart{background:#657292;color:#fff}
+  .help{margin-top:10px;padding:11px 13px;background:#161c27;border:1px dashed #46516a;border-radius:11px;color:#cbd3e3;font-size:14px;line-height:1.45}
+  .message{text-align:center;min-height:24px;padding:6px;color:#dfe7f6;font-weight:800}
+  .kbd{padding:1px 6px;border:1px solid #65708a;border-bottom-width:2px;border-radius:5px;background:#0e131b;font-family:monospace}
+  @media(max-width:780px){
+    .hud{grid-template-columns:1fr}
+    .right{text-align:left}
+    .controls{grid-template-columns:1fr}
+    .buttons{grid-template-columns:1fr}
+    .healthbar{width:130px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>TANK DUEL</h1>
+  <div class="sub">A retro artillery game inspired by the classic Scorched Earth.</div>
+
+  <div class="gamebox">
+    <div class="hud">
+      <div class="card tankinfo">
+        <div>🟩</div>
+        <div>
+          <div class="tankname">YOU</div>
+          <div class="healthbar"><div id="playerHealth" class="healthfill"></div></div>
+        </div>
+        <strong id="playerHp">100</strong>
+      </div>
+      <div id="turnLabel" class="turn">YOUR TURN</div>
+      <div class="card tankinfo right" style="justify-content:flex-end">
+        <div>
+          <div class="tankname">CPU</div>
+          <div class="healthbar"><div id="cpuHealth" class="healthfill"></div></div>
+        </div>
+        <strong id="cpuHp">100</strong>
+        <div>🟥</div>
+      </div>
+    </div>
+
+    <canvas id="game" width="1050" height="560" aria-label="Tank artillery battlefield"></canvas>
+    <div id="message" class="message">Set your angle and power, then FIRE.</div>
+
+    <div class="controls">
+      <div class="control">
+        <label for="angle">Angle <span class="value"><span id="angleVal">45</span>°</span></label>
+        <input id="angle" type="range" min="10" max="80" value="45">
+      </div>
+      <div class="control">
+        <label for="power">Power <span class="value"><span id="powerVal">70</span>%</span></label>
+        <input id="power" type="range" min="20" max="100" value="70">
+      </div>
+      <div class="control">
+        <label for="weapon">Weapon</label>
+        <select id="weapon">
+          <option value="normal">Normal Shell</option>
+          <option value="big">Big Blast</option>
+          <option value="bouncer">Bouncer</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="fire" class="fire">🔥 FIRE</button>
+      <button id="restart" class="restart">↻ NEW BATTLE</button>
+    </div>
+
+    <div class="help">
+      <strong>How to play:</strong> Adjust <strong>Angle</strong> and <strong>Power</strong> and press <span class="kbd">SPACE</span> or FIRE.
+      Your shell follows real projectile physics and the terrain is destructible. Use the wind indicator in the sky to compensate.
+      Land a hit to damage the enemy. Then the CPU gets a turn.
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  const angleInput = document.getElementById('angle');
+  const powerInput = document.getElementById('power');
+  const weaponInput = document.getElementById('weapon');
+  const angleVal = document.getElementById('angleVal');
+  const powerVal = document.getElementById('powerVal');
+  const fireBtn = document.getElementById('fire');
+  const restartBtn = document.getElementById('restart');
+  const playerHealth = document.getElementById('playerHealth');
+  const cpuHealth = document.getElementById('cpuHealth');
+  const playerHp = document.getElementById('playerHp');
+  const cpuHp = document.getElementById('cpuHp');
+  const turnLabel = document.getElementById('turnLabel');
+  const message = document.getElementById('message');
+
+  const GRAVITY = 0.19;
+  const MAX_TERRAIN_Y = 500;
+  const MIN_TERRAIN_Y = 255;
+  const TANK_W = 34;
+  const TANK_H = 21;
+
+  let terrain = [];
+  let player = {};
+  let cpu = {};
+  let wind = 0;
+  let projectile = null;
+  let particles = [];
+  let explosions = [];
+  let gameOver = false;
+  let turn = 'player';
+  let cpuThinkingTimer = 0;
+  let shake = 0;
+
+  function clamp(v,min,max){ return Math.max(min,Math.min(max,v)); }
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function generateTerrain(){
+    terrain = new Array(W);
+    let y = 375;
+    for(let x=0;x<W;x++){
+      if(x>0) y += rand(-2.7,2.7);
+      y += (360-y)*0.018;
+      y = clamp(y, MIN_TERRAIN_Y, MAX_TERRAIN_Y);
+      terrain[x] = y;
+    }
+    // Smooth the terrain a little.
+    for(let pass=0;pass<3;pass++){
+      const copy = terrain.slice();
+      for(let x=1;x<W-1;x++){
+        terrain[x] = (copy[x-1]+copy[x]+copy[x+1])/3;
+      }
+    }
+  }
+
+  function surfaceY(x){
+    x = clamp(Math.round(x),0,W-1);
+    return terrain[x];
+  }
+
+  function placeTanks(){
+    player = {x:150, y:surfaceY(150)-TANK_H/2, hp:100, color:'#53d769'};
+    cpu = {x:900, y:surfaceY(900)-TANK_H/2, hp:100, color:'#ef5d67'};
+  }
+
+  function newBattle(){
+    generateTerrain();
+    placeTanks();
+    wind = rand(-0.045,0.045);
+    projectile = null;
+    particles = [];
+    explosions = [];
+    gameOver = false;
+    turn = 'player';
+    cpuThinkingTimer = 0;
+    shake = 0;
+    angleInput.value = 45;
+    powerInput.value = 70;
+    weaponInput.value = 'normal';
+    syncUI();
+    message.textContent = 'Set your angle and power, then FIRE.';
+  }
+
+  function syncUI(){
+    angleVal.textContent = angleInput.value;
+    powerVal.textContent = powerInput.value;
+    playerHp.textContent = Math.max(0,Math.round(player.hp));
+    cpuHp.textContent = Math.max(0,Math.round(cpu.hp));
+    playerHealth.style.width = clamp(player.hp,0,100)+'%';
+    cpuHealth.style.width = clamp(cpu.hp,0,100)+'%';
+    turnLabel.textContent = gameOver ? 'BATTLE OVER' : (turn === 'player' ? 'YOUR TURN' : 'CPU TURN');
+    turnLabel.style.color = turn === 'player' ? '#9cf1ad' : '#ff9696';
+  }
+
+  function tankMuzzle(tank, angleDeg, isPlayer){
+    const angle = angleDeg * Math.PI/180;
+    const dir = isPlayer ? 1 : -1;
+    const barrelLen = 30;
+    const mx = tank.x + dir * Math.cos(angle) * barrelLen;
+    const my = tank.y - Math.sin(angle) * barrelLen;
+    return {x:mx,y:my};
+  }
+
+  function fireFrom(tank, isPlayer, angleDeg, powerPct, weapon){
+    const rad = angleDeg * Math.PI/180;
+    const dir = isPlayer ? 1 : -1;
+    const muzzle = tankMuzzle(tank, angleDeg, isPlayer);
+    let speed = 3.2 + powerPct*0.09;
+    let radius = 28;
+    let damage = 30;
+    let bounce = 0;
+    if(weapon === 'big'){ speed *= .92; radius = 46; damage = 45; }
+    if(weapon === 'bouncer'){ speed *= 1.02; radius = 20; damage = 24; bounce = 2; }
+
+    projectile = {
+      x:muzzle.x, y:muzzle.y,
+      vx:dir*Math.cos(rad)*speed,
+      vy:-Math.sin(rad)*speed,
+      radius, damage, bounce, owner:isPlayer?'player':'cpu',
+      trail:[]
+    };
+    explosions.push({x:muzzle.x,y:muzzle.y,r:10,life:10,max:10,kind:'muzzle'});
+    message.textContent = isPlayer ? 'Nice shot! Watch the trajectory...' : 'Incoming!';
+  }
+
+  function carveTerrain(cx, cy, radius){
+    const minX = Math.max(0,Math.floor(cx-radius-2));
+    const maxX = Math.min(W-1,Math.ceil(cx+radius+2));
+    for(let x=minX;x<=maxX;x++){
+      const dx=x-cx;
+      if(Math.abs(dx)>radius) continue;
+      const depth=Math.sqrt(radius*radius-dx*dx);
+      const top = cy-depth;
+      const bottom = cy+depth;
+      if(terrain[x] < bottom){
+        // A blast can remove material around and below the crater.
+        terrain[x] = Math.max(175, Math.min(terrain[x], top));
+      }
+    }
+    settleTerrain();
+  }
+
+  function settleTerrain(){
+    for(let pass=0;pass<2;pass++){
+      const old=terrain.slice();
+      for(let x=1;x<W-1;x++){
+        const local = (old[x-1]+old[x]+old[x+1])/3;
+        terrain[x] = clamp(local, MIN_TERRAIN_Y, MAX_TERRAIN_Y);
+      }
+    }
+    // Put tanks back on top if terrain was changed under them.
+    if(player && player.hp>0) player.y=surfaceY(player.x)-TANK_H/2;
+    if(cpu && cpu.hp>0) cpu.y=surfaceY(cpu.x)-TANK_H/2;
+  }
+
+  function explode(x,y,damageRadius,baseDamage,owner){
+    explosions.push({x,y,r:6,life:26,max:26,kind:'blast',maxR:damageRadius});
+    shake=10;
+    carveTerrain(x,y,damageRadius);
+
+    const targets = [
+      {tank:player,name:'player'},
+      {tank:cpu,name:'cpu'}
+    ];
+    for(const t of targets){
+      const dx=t.tank.x-x;
+      const dy=(t.tank.y-8)-y;
+      const dist=Math.hypot(dx,dy);
+      if(dist < damageRadius + 24 && t.tank.hp>0){
+        const falloff = clamp(1-dist/(damageRadius+24),0.15,1);
+        const dealt = Math.round(baseDamage*falloff);
+        t.tank.hp -= dealt;
+        for(let i=0;i<18;i++){
+          particles.push({
+            x:t.tank.x+rand(-14,14), y:t.tank.y+rand(-12,8),
+            vx:rand(-2.5,2.5), vy:rand(-4,-1), life:rand(18,34), size:rand(2,5), kind:'hit'
+          });
+        }
+        if(t.name==='player') message.textContent=`CPU hit you for ${dealt} damage!`;
+        else message.textContent=`Direct-ish hit! CPU lost ${dealt} HP.`;
+      }
+    }
+
+    for(let i=0;i<65;i++){
+      const a=rand(0,Math.PI*2), s=rand(1,5.5);
+      particles.push({
+        x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-rand(0,2),
+        life:rand(20,48),size:rand(2,6),kind:Math.random()<.5?'spark':'dirt'
+      });
+    }
+  }
+
+  function resolveProjectile(){
+    if(!projectile) return;
+    const p=projectile;
+    let impact = false;
+
+    if(p.x<0 || p.x>W || p.y>H+50){
+      projectile=null;
+      turn='player';
+      message.textContent='That one went wide. Your turn.';
+      syncUI();
+      return;
+    }
+
+    const terrainHit = p.y >= surfaceY(p.x)-2;
+    const playerHit = player.hp>0 && Math.hypot(p.x-player.x, p.y-(player.y-4))<22;
+    const cpuHit = cpu.hp>0 && Math.hypot(p.x-cpu.x, p.y-(cpu.y-4))<22;
+
+    if(terrainHit || playerHit || cpuHit){
+      impact = true;
+      if(terrainHit || playerHit || cpuHit){
+        explode(p.x,p.y,p.radius,p.damage,p.owner);
+      }
+      if(p.bounce>0 && terrainHit && !playerHit && !cpuHit){
+        p.bounce--;
+        p.vy=-Math.abs(p.vy)*0.72;
+        p.vx*=0.8;
+        p.y=surfaceY(p.x)-3;
+        impact=false;
+      }
+    }
+
+    if(impact){
+      projectile=null;
+      if(player.hp<=0 || cpu.hp<=0){
+        gameOver=true;
+        turn='none';
+        syncUI();
+        message.textContent = player.hp<=0 ? '💥 YOU LOST! Press NEW BATTLE to try again.' : '🏆 YOU WIN! Press NEW BATTLE to play again.';
+        return;
+      }
+      if(turn==='player'){
+        turn='cpu';
+        cpuThinkingTimer=70;
+        message.textContent='CPU is choosing a shot...';
+      } else {
+        turn='player';
+        message.textContent='Your turn. Pick a new angle and power.';
+      }
+      syncUI();
+    }
+  }
+
+  function update(){
+    if(projectile){
+      projectile.trail.push({x:projectile.x,y:projectile.y});
+      if(projectile.trail.length>18) projectile.trail.shift();
+      projectile.vx += wind*0.55;
+      projectile.vy += GRAVITY;
+      projectile.x += projectile.vx;
+      projectile.y += projectile.vy;
+      resolveProjectile();
+    }
+
+    if(turn==='cpu' && !projectile && !gameOver){
+      cpuThinkingTimer--;
+      if(cpuThinkingTimer<=0){
+        // Estimate a useful angle/power from the current geometry with some randomness.
+        const dx = player.x-cpu.x;
+        const distance = Math.abs(dx);
+        let a = clamp(42 + (distance-650)*0.015 + rand(-7,7), 25, 68);
+        let p = clamp(68 + (distance-500)*0.025 + rand(-9,9), 45, 100);
+        fireFrom(cpu,false,a,p,Math.random()<0.18?'big':'normal');
+      }
+    }
+
+    for(const q of particles){
+      q.x+=q.vx; q.y+=q.vy; q.vy+=0.11; q.vx*=0.98; q.life--;
+    }
+    particles=particles.filter(q=>q.life>0);
+
+    for(const e of explosions) e.life--;
+    explosions=explosions.filter(e=>e.life>0);
+
+    if(shake>0) shake*=0.85;
+    syncUI();
+  }
+
+  function drawSky(){
+    const grad=ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'#73bfe9');
+    grad.addColorStop(.66,'#bfe8fb');
+    grad.addColorStop(1,'#d8f1ff');
+    ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+
+    // Clouds
+    ctx.globalAlpha=.3;
+    ctx.fillStyle='#fff';
+    const clouds=[[130,85,70],[520,125,95],[840,75,85]];
+    for(const [x,y,s] of clouds){
+      ctx.beginPath();
+      ctx.arc(x,y,s*.35,0,Math.PI*2);
+      ctx.arc(x+s*.28,y-8,s*.45,0,Math.PI*2);
+      ctx.arc(x+s*.58,y,s*.32,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha=1;
+
+    // Sun
+    ctx.fillStyle='rgba(255,236,156,.9)';
+    ctx.beginPath();ctx.arc(90,70,30,0,Math.PI*2);ctx.fill();
+  }
+
+  function drawWind(){
+    const x=W/2, y=55;
+    ctx.save();
+    ctx.font='bold 15px system-ui';
+    ctx.fillStyle='#18314c';
+    ctx.textAlign='center';
+    ctx.fillText(`WIND ${Math.round(Math.abs(wind)*1000)} ${wind>=0?'→':'←'}`,x,y-18);
+    ctx.strokeStyle='#18314c'; ctx.lineWidth=4; ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(x-42,y);ctx.lineTo(x+42,y);ctx.stroke();
+    ctx.beginPath();
+    if(wind>=0){
+      ctx.moveTo(x+42,y);ctx.lineTo(x+27,y-10);ctx.moveTo(x+42,y);ctx.lineTo(x+27,y+10);
+    }else{
+      ctx.moveTo(x-42,y);ctx.lineTo(x-27,y-10);ctx.moveTo(x-42,y);ctx.lineTo(x-27,y+10);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTerrain(){
+    ctx.beginPath();
+    ctx.moveTo(0,H);
+    ctx.lineTo(0,terrain[0]);
+    for(let x=1;x<W;x++) ctx.lineTo(x,terrain[x]);
+    ctx.lineTo(W,H);ctx.closePath();
+    const grad=ctx.createLinearGradient(0,300,0,H);
+    grad.addColorStop(0,'#a8df70');grad.addColorStop(.25,'#62b84d');grad.addColorStop(1,'#28452e');
+    ctx.fillStyle=grad;ctx.fill();
+
+    ctx.strokeStyle='#2f662f';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(0,terrain[0]);
+    for(let x=1;x<W;x++)ctx.lineTo(x,terrain[x]);
+    ctx.stroke();
+
+    // little rocks
+    ctx.fillStyle='rgba(30,50,32,.55)';
+    for(let i=0;i<110;i++){
+      const x=(i*83)%W, y=surfaceY(x)+rand(10,45);
+      ctx.fillRect(x,y,rand(2,5),rand(2,4));
+    }
+  }
+
+  function drawTank(tank,isPlayer){
+    const baseY=tank.y+4;
+    ctx.save();
+    ctx.translate(tank.x, tank.y);
+
+    // Wheels
+    ctx.fillStyle='#20252d';
+    for(const wx of [-12,-4,4,12]){
+      ctx.beginPath();ctx.arc(wx,12,5,0,Math.PI*2);ctx.fill();
+    }
+
+    // Body
+    ctx.fillStyle=tank.color;
+    ctx.strokeStyle='#152018';ctx.lineWidth=3;
+    ctx.beginPath();ctx.roundRect(-18,0,36,14,4);ctx.fill();ctx.stroke();
+
+    // Turret
+    ctx.beginPath();ctx.arc(0,0,10,Math.PI,0);ctx.fill();ctx.stroke();
+
+    // Barrel
+    const a=(isPlayer?1:-1)*1;
+    const aim = isPlayer ? Number(angleInput.value) : 48;
+    const r=aim*Math.PI/180;
+    ctx.lineWidth=6;ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(a*Math.cos(r)*28,-Math.sin(r)*28);
+    ctx.strokeStyle='#28312b';ctx.stroke();
+
+    // Health pips
+    ctx.fillStyle='rgba(255,255,255,.2)';
+    ctx.fillRect(-17,-18,34,4);
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(-17,-18,34*clamp(tank.hp/100,0,1),4);
+
+    ctx.restore();
+  }
+
+  function drawPreview(){
+    if(turn!=='player' || projectile || gameOver) return;
+    const angle=Number(angleInput.value), power=Number(powerInput.value);
+    const rad=angle*Math.PI/180;
+    const dir=1;
+    const muzzle=tankMuzzle(player,angle,true);
+    let speed=3.2+power*.09;
+    ctx.save();
+    ctx.setLineDash([5,7]);
+    ctx.strokeStyle='rgba(35,50,70,.42)';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    let x=muzzle.x,y=muzzle.y,vx=Math.cos(rad)*speed,vy=-Math.sin(rad)*speed;
+    ctx.moveTo(x,y);
+    for(let i=0;i<55;i++){
+      vx+=wind*.55;vy+=GRAVITY;x+=vx;y+=vy;
+      if(y>H)break;
+      ctx.lineTo(x,y);
+    }
+    ctx.stroke();ctx.restore();
+  }
+
+  function drawProjectile(){
+    if(!projectile) return;
+    ctx.save();
+    for(let i=0;i<projectile.trail.length;i++){
+      const q=projectile.trail[i];
+      const a=(i+1)/projectile.trail.length;
+      ctx.globalAlpha=a*.35;
+      ctx.fillStyle='#fff2b0';
+      ctx.beginPath();ctx.arc(q.x,q.y,Math.max(1.5,a*4),0,Math.PI*2);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#2c2630';ctx.strokeStyle='#fff7bf';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(projectile.x,projectile.y,5,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawEffects(){
+    for(const e of explosions){
+      if(e.kind==='muzzle'){
+        const a=e.life/e.max;
+        ctx.globalAlpha=a;
+        ctx.fillStyle='#ffd166';
+        ctx.beginPath();ctx.arc(e.x,e.y,e.r+(10*(1-a)),0,Math.PI*2);ctx.fill();
+        ctx.globalAlpha=1;
+      }else{
+        const p=1-e.life/e.max;
+        const r=e.maxR*(0.25+0.75*p);
+        ctx.globalAlpha=(e.life/e.max)*0.7;
+        ctx.fillStyle='#ff9b2f';
+        ctx.beginPath();ctx.arc(e.x,e.y,r,0,Math.PI*2);ctx.fill();
+        ctx.globalAlpha=(e.life/e.max);
+        ctx.strokeStyle='#fff0a0';ctx.lineWidth=5;
+        ctx.beginPath();ctx.arc(e.x,e.y,r*.72,0,Math.PI*2);ctx.stroke();
+        ctx.globalAlpha=1;
+      }
+    }
+
+    for(const q of particles){
+      ctx.globalAlpha=clamp(q.life/35,0,1);
+      ctx.fillStyle=q.kind==='hit'?'#ff704d':(q.kind==='spark'?'#ffd25a':'#5d4b35');
+      ctx.fillRect(q.x,q.y,q.size,q.size);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function draw(){
+    ctx.save();
+    if(shake>0){
+      ctx.translate(rand(-shake,shake),rand(-shake,shake));
+    }
+    drawSky();
+    drawWind();
+    drawTerrain();
+    drawPreview();
+    drawTank(player,true);
+    drawTank(cpu,false);
+    drawProjectile();
+    drawEffects();
+
+    // Labels
+    ctx.font='800 14px system-ui';
+    ctx.textAlign='center';
+    ctx.fillStyle='#13321e';
+    ctx.fillText('YOU',player.x,player.y-28);
+    ctx.fillStyle='#3b1316';
+    ctx.fillText('CPU',cpu.x,cpu.y-28);
+    ctx.restore();
+
+    // Aim angle visual near player
+    if(turn==='player' && !projectile && !gameOver){
+      ctx.save();
+      ctx.strokeStyle='rgba(20,35,42,.35)';ctx.lineWidth=2;ctx.setLineDash([3,4]);
+      const r=Number(angleInput.value)*Math.PI/180;
+      ctx.beginPath();
+      ctx.arc(player.x,player.y,44,-r,0,false);
+      ctx.stroke();ctx.restore();
+    }
+  }
+
+  function loop(){
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  angleInput.addEventListener('input',syncUI);
+  powerInput.addEventListener('input',syncUI);
+
+  function playerFire(){
+    if(turn!=='player' || projectile || gameOver) return;
+    fireFrom(player,true,Number(angleInput.value),Number(powerInput.value),weaponInput.value);
+    syncUI();
+  }
+  fireBtn.addEventListener('click',playerFire);
+  restartBtn.addEventListener('click',newBattle);
+
+  window.addEventListener('keydown',e=>{
+    if(e.code==='Space'){
+      e.preventDefault();
+      playerFire();
+    }
+    if(e.key==='ArrowUp'){
+      angleInput.value=clamp(Number(angleInput.value)+1,10,80);syncUI();
+    }
+    if(e.key==='ArrowDown'){
+      angleInput.value=clamp(Number(angleInput.value)-1,10,80);syncUI();
+    }
+    if(e.key==='ArrowRight'){
+      powerInput.value=clamp(Number(powerInput.value)+1,20,100);syncUI();
+    }
+    if(e.key==='ArrowLeft'){
+      powerInput.value=clamp(Number(powerInput.value)-1,20,100);syncUI();
+    }
+  });
+
+  // Make canvas responsive without changing game coordinates.
+  function resizeCanvas(){
+    const rect=canvas.getBoundingClientRect();
+    canvas.style.aspectRatio=W+'/'+H;
+  }
+  window.addEventListener('resize',resizeCanvas);
+
+  newBattle();
+  resizeCanvas();
+  loop();
+})();
+</script>
+</body>
+</html>

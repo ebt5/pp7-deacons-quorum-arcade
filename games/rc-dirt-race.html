@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RC Dirt Race</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #1a120c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Trebuchet MS", Verdana, sans-serif;
+    }
+    canvas {
+      width: min(100vw, 980px);
+      height: auto;
+      box-shadow: 0 0 0 6px #c4a574, 0 16px 40px #000;
+      background: #6b4a2a;
+    }
+  </style>
+</head>
+<body>
+<canvas id="game" width="960" height="600"></canvas>
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const W = 960;
+const H = 600;
+const RACE_SECONDS = 180;
+const TRACK_HALF = 46;
+
+const keys = {};
+let state = "title";
+let cars = [];
+let last = 0;
+let dust = [];
+let winner = null;
+let timeLeft = RACE_SECONDS;
+
+const center = [
+  [180, 150], [320, 110], [520, 120], [700, 160], [820, 250],
+  [800, 380], [680, 470], [500, 500], [300, 480], [160, 400],
+  [120, 280]
+];
+
+const jumps = [
+  { at: 1.6, len: 0.28 },
+  { at: 4.3, len: 0.26 },
+  { at: 7.2, len: 0.3 },
+  { at: 9.4, len: 0.24 }
+];
+
+const pools = [
+  { at: 2.7, len: 0.42 },
+  { at: 5.6, len: 0.38 },
+  { at: 8.5, len: 0.4 }
+];
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+function dist(ax, ay, bx, by) { return Math.hypot(bx - ax, by - ay); }
+
+function wrapProgress(p) {
+  const n = center.length;
+  return ((p % n) + n) % n;
+}
+
+function pointOnTrack(i) {
+  const n = center.length;
+  const f = Math.floor(wrapProgress(i));
+  const a = center[f];
+  const b = center[(f + 1) % n];
+  const t = wrapProgress(i) - f;
+  return { x: lerp(a[0], b[0], t), y: lerp(a[1], b[1], t) };
+}
+
+function nearestProgress(x, y) {
+  let best = 0;
+  let bestD = 1e9;
+  for (let i = 0; i < center.length; i += 0.04) {
+    const p = pointOnTrack(i);
+    const d = dist(x, y, p.x, p.y);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return { progress: best, off: bestD, point: pointOnTrack(best) };
+}
+
+function inBand(progress, at, len) {
+  const n = center.length;
+  const d = wrapProgress(progress - at);
+  return d < len || d > n - 0.02;
+}
+
+function makeCar(name, color, accent, progress, ai) {
+  const p = pointOnTrack(progress);
+  const n = pointOnTrack(progress + 0.05);
+  return {
+    name, color, accent, ai,
+    x: p.x, y: p.y, z: 0, vz: 0,
+    angle: Math.atan2(n.y - p.y, n.x - p.x),
+    speed: 0,
+    progress,
+    laps: 0,
+    lastProg: progress,
+    distance: 0,
+    wet: 0
+  };
+}
+
+function startRace() {
+  cars = [
+    makeCar("YOU", "#e23b3b", "#fff", 0.15, false),
+    makeCar("DUSTY", "#f0c14a", "#333", 0.02, true),
+    makeCar("BOLT", "#3d8bfd", "#fff", 10.85, true),
+    makeCar("MUD", "#49b86a", "#fff", 10.72, true)
+  ];
+  dust = [];
+  winner = null;
+  timeLeft = RACE_SECONDS;
+  state = "race";
+}
+
+function keepOnTrack(car) {
+  if (car.z > 2) return;
+  const near = nearestProgress(car.x, car.y);
+  if (near.off > TRACK_HALF) {
+    const p = near.point;
+    car.x = p.x + (car.x - p.x) * (TRACK_HALF / near.off);
+    car.y = p.y + (car.y - p.y) * (TRACK_HALF / near.off);
+    car.speed *= 0.9;
+  }
+}
+
+function updateCar(car, dt) {
+  const max = car.ai ? 170 + (car.name === "BOLT" ? 12 : 0) : 190;
+  const airborne = car.z > 1;
+  if (car.ai) {
+    const look = pointOnTrack(car.progress + 0.4);
+    const want = Math.atan2(look.y - car.y, look.x - car.x);
+    let diff = want - car.angle;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    if (!airborne) car.angle += Math.max(-2.5, Math.min(2.5, diff)) * dt * 3.2;
+    const wetSlow = car.wet > 0 ? 0.55 : 1;
+    const target = (Math.abs(diff) > 0.55 ? max * 0.6 : max) * wetSlow;
+    car.speed += (target - car.speed) * dt * 1.5;
+  } else {
+    const steer = airborne ? 0.35 : 1;
+    if (keys["ArrowLeft"]) car.angle -= 2.6 * dt * steer * (0.4 + car.speed / max);
+    if (keys["ArrowRight"]) car.angle += 2.6 * dt * steer * (0.4 + car.speed / max);
+    if (keys[" "] || keys["Spacebar"]) car.speed += 240 * dt;
+    else car.speed -= 80 * dt;
+    if (keys["ArrowDown"]) car.speed -= 200 * dt;
+  }
+
+  car.wet = 0;
+  if (!airborne) {
+    for (const pool of pools) {
+      if (inBand(car.progress, pool.at, pool.len)) car.wet = 1;
+    }
+    if (car.wet) car.speed -= 140 * dt;
+  }
+  car.speed = Math.max(0, Math.min(max, car.speed));
+
+  car.x += Math.cos(car.angle) * car.speed * dt;
+  car.y += Math.sin(car.angle) * car.speed * dt;
+  car.vz -= 900 * dt;
+  car.z += car.vz * dt;
+  if (car.z <= 0) {
+    car.z = 0;
+    car.vz = 0;
+  }
+
+  keepOnTrack(car);
+  const near = nearestProgress(car.x, car.y);
+  let advanced = near.progress - car.lastProg;
+  if (advanced < -center.length / 2) {
+    advanced += center.length;
+    car.laps += 1;
+  } else if (advanced > center.length / 2) {
+    advanced -= center.length;
+    car.laps = Math.max(0, car.laps - 1);
+  }
+  if (advanced > 0) car.distance += advanced;
+  car.progress = near.progress;
+  car.lastProg = near.progress;
+
+  if (car.z === 0 && car.speed > 90) {
+    for (const jump of jumps) {
+      if (inBand(car.progress, jump.at, 0.08)) car.vz = 210 + car.speed * 0.35;
+    }
+  }
+
+  if (car.speed > 40 && car.z < 2 && Math.random() < dt * 12) {
+    dust.push({
+      x: car.x - Math.cos(car.angle) * 16,
+      y: car.y - Math.sin(car.angle) * 16,
+      life: car.wet ? 0.35 : 0.45,
+      r: 4,
+      wet: car.wet
+    });
+  }
+}
+
+function bumpCars() {
+  for (let i = 0; i < cars.length; i++) {
+    for (let j = i + 1; j < cars.length; j++) {
+      const a = cars[i];
+      const b = cars[j];
+      if (Math.abs(a.z - b.z) > 16) continue;
+      const d = dist(a.x, a.y, b.x, b.y);
+      if (d < 28 && d > 0) {
+        const nx = (b.x - a.x) / d;
+        const ny = (b.y - a.y) / d;
+        const push = (28 - d) / 2;
+        a.x -= nx * push;
+        a.y -= ny * push;
+        b.x += nx * push;
+        b.y += ny * push;
+        a.speed *= 0.98;
+        b.speed *= 0.98;
+        keepOnTrack(a);
+        keepOnTrack(b);
+      }
+    }
+  }
+}
+
+function standings() {
+  return cars.slice().sort((a, b) => b.distance - a.distance);
+}
+
+function update(dt) {
+  if (state !== "race") return;
+  timeLeft -= dt;
+  for (const car of cars) updateCar(car, dt);
+  bumpCars();
+  dust = dust.filter(p => {
+    p.life -= dt;
+    p.r += dt * 16;
+    return p.life > 0;
+  });
+  if (timeLeft <= 0) {
+    timeLeft = 0;
+    winner = standings()[0];
+    state = "done";
+  }
+}
+
+function drawRibbon(width, color) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  center.forEach((p, i) => i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]));
+  ctx.closePath();
+  ctx.stroke();
+}
+
+function drawTrack() {
+  ctx.fillStyle = "#6d4a2c";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#5a3b22";
+  for (let i = 0; i < 18; i++) {
+    ctx.beginPath();
+    ctx.arc(60 + (i * 137) % W, 40 + (i * 89) % H, 26, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  drawRibbon(108, "#a86b3c");
+  drawRibbon(92, "#e2b56a");
+  ctx.setLineDash([16, 14]);
+  drawRibbon(3, "rgba(255,255,255,0.35)");
+  ctx.setLineDash([]);
+
+  for (const pool of pools) {
+    for (let t = 0; t < pool.len; t += 0.05) {
+      const p = pointOnTrack(pool.at + t);
+      ctx.fillStyle = "rgba(46, 140, 196, 0.82)";
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 34, 22, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  for (const jump of jumps) {
+    const p = pointOnTrack(jump.at);
+    const n = pointOnTrack(jump.at + 0.08);
+    const ang = Math.atan2(n.y - p.y, n.x - p.x);
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(ang);
+    ctx.fillStyle = "#f3d28a";
+    ctx.beginPath();
+    ctx.moveTo(-28, -30);
+    ctx.lineTo(18, -30);
+    ctx.lineTo(28, 30);
+    ctx.lineTo(-28, 30);
+    ctx.fill();
+    ctx.fillStyle = "#c9844a";
+    ctx.fillRect(-28, -30, 10, 60);
+    ctx.restore();
+  }
+
+  const start = pointOnTrack(0);
+  const next = pointOnTrack(0.15);
+  const ang = Math.atan2(next.y - start.y, next.x - start.x) + Math.PI / 2;
+  ctx.save();
+  ctx.translate(start.x, start.y);
+  ctx.rotate(ang);
+  for (let i = -3; i <= 3; i++) {
+    ctx.fillStyle = i % 2 ? "#fff" : "#222";
+    ctx.fillRect(-40, i * 8, 12, 8);
+  }
+  ctx.restore();
+}
+
+function drawCar(car) {
+  const lift = car.z * 0.35;
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  ctx.beginPath();
+  ctx.ellipse(car.x + 4, car.y + 10, 14, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.translate(car.x, car.y - lift);
+  ctx.rotate(car.angle);
+  const s = 1 + car.z / 180;
+  ctx.scale(s, s);
+  ctx.fillStyle = "#222";
+  ctx.fillRect(-16, -12, 8, 6);
+  ctx.fillRect(8, -12, 8, 6);
+  ctx.fillRect(-16, 6, 8, 6);
+  ctx.fillRect(8, 6, 8, 6);
+  ctx.fillStyle = car.color;
+  ctx.fillRect(-14, -9, 28, 18);
+  ctx.fillStyle = car.accent;
+  ctx.fillRect(4, -5, 8, 10);
+  ctx.restore();
+}
+
+function clock() {
+  const m = Math.floor(timeLeft / 60);
+  const s = Math.floor(timeLeft % 60);
+  return m + ":" + String(s).padStart(2, "0");
+}
+
+function meters(car) {
+  return Math.floor(car.distance * 80);
+}
+
+function drawHud() {
+  const order = standings();
+  ctx.fillStyle = "rgba(20,12,6,0.75)";
+  ctx.fillRect(12, 12, 250, 154);
+  ctx.fillStyle = "#fff6e4";
+  ctx.textAlign = "left";
+  ctx.font = "bold 18px Trebuchet MS";
+  ctx.fillText("FARTHEST IN 3:00", 24, 36);
+  order.forEach((car, i) => {
+    ctx.fillStyle = car.color;
+    ctx.fillText((i + 1) + "  " + car.name + "  " + meters(car) + "m", 24, 64 + i * 24);
+  });
+  ctx.fillStyle = "rgba(20,12,6,0.75)";
+  ctx.fillRect(730, 12, 216, 46);
+  ctx.fillStyle = "#fff6e4";
+  ctx.font = "bold 22px Trebuchet MS";
+  ctx.fillText("TIME " + clock(), 744, 42);
+}
+
+function drawOverlay(title, lines) {
+  ctx.fillStyle = "rgba(12,8,4,0.62)";
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#ffd56a";
+  ctx.textAlign = "center";
+  ctx.font = "bold 58px Trebuchet MS";
+  ctx.fillText(title, W / 2, 190);
+  ctx.fillStyle = "#fff";
+  ctx.font = "24px Trebuchet MS";
+  lines.forEach((line, i) => ctx.fillText(line, W / 2, 255 + i * 36));
+}
+
+function draw() {
+  drawTrack();
+  for (const p of dust) {
+    ctx.fillStyle = p.wet ? "rgba(70,140,180," + p.life + ")" : "rgba(90,60,30," + p.life + ")";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const order = cars.slice().sort((a, b) => a.y - b.y);
+  for (const car of order) drawCar(car);
+  if (state === "title") {
+    drawOverlay("RC DIRT RACE", [
+      "Four cars. Furthest distance in 3 minutes wins.",
+      "Space is gas. Down arrow brakes.",
+      "Left and right steer. Cars must stay on the dirt.",
+      "Tan ramps launch you. Blue pools slow you down.",
+      "Press Enter to race"
+    ]);
+    return;
+  }
+  drawHud();
+  if (state === "done") {
+    const youWon = winner && winner.name === "YOU";
+    drawOverlay(youWon ? "YOU WIN" : "RACE OVER", [
+      winner.name + " went the furthest",
+      winner.name + " " + meters(winner) + "m    You " + meters(cars[0]) + "m",
+      "Press Enter to race again"
+    ]);
+  }
+}
+
+function frame(now) {
+  if (!last) last = now;
+  const dt = Math.min(0.033, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener("keydown", (e) => {
+  keys[e.key] = true;
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", " "].includes(e.key)) e.preventDefault();
+  if (e.key === "Enter" && state !== "race") startRace();
+});
+window.addEventListener("keyup", (e) => { keys[e.key] = false; });
+
+cars = [
+  makeCar("YOU", "#e23b3b", "#fff", 0.15, false),
+  makeCar("DUSTY", "#f0c14a", "#333", 0.02, true),
+  makeCar("BOLT", "#3d8bfd", "#fff", 0.02, true),
+  makeCar("MUD", "#49b86a", "#fff", 0.02, true)
+];
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

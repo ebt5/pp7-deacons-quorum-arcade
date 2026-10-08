@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIX SEVEN!!</title>
+  <style>
+    :root {
+      --bg1: #bde0fe;
+      --bg2: #e8f7ff;
+      --body: #4f86c6;
+      --body-dark: #315d8d;
+      --skin: #ffd6a5;
+      --shirt: #ff6b6b;
+      --white: #ffffff;
+      --ink: #1f2937;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(var(--bg1), var(--bg2));
+      color: var(--ink);
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    .game {
+      width: min(760px, 94vw);
+      margin: 0 auto;
+      padding: 24px 0 40px;
+      text-align: center;
+      user-select: none;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(30px, 6vw, 52px);
+      letter-spacing: 2px;
+      text-shadow: 2px 3px 0 rgba(0,0,0,0.08);
+    }
+
+    .score-card {
+      display: inline-block;
+      background: rgba(255,255,255,0.9);
+      border: 3px solid var(--ink);
+      border-radius: 16px;
+      padding: 10px 24px;
+      margin-bottom: 18px;
+      box-shadow: 0 7px 0 rgba(0,0,0,0.12);
+    }
+
+    .score-label {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      opacity: 0.7;
+    }
+
+    #score {
+      font-size: 44px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .stage {
+      position: relative;
+      height: 460px;
+      border: 4px solid var(--ink);
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 50% 30%, rgba(255,255,255,0.75), transparent 34%),
+        linear-gradient(#dff6ff 0 72%, #9bd18b 72% 100%);
+      box-shadow: 0 10px 0 rgba(0,0,0,0.13);
+      overflow: hidden;
+    }
+
+    .floor-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 18%;
+      height: 5px;
+      background: rgba(31,41,55,0.25);
+    }
+
+    .character {
+      position: absolute;
+      left: 50%;
+      top: 52%;
+      width: 170px;
+      height: 230px;
+      transform: translate(-50%, -50%);
+    }
+
+    .head {
+      position: absolute;
+      left: 35px;
+      top: 8px;
+      width: 100px;
+      height: 96px;
+      border: 4px solid var(--ink);
+      border-radius: 48% 48% 46% 46%;
+      background: var(--skin);
+      z-index: 4;
+    }
+
+    .hair {
+      position: absolute;
+      left: 31px;
+      top: 0;
+      width: 108px;
+      height: 42px;
+      background: var(--body-dark);
+      border: 4px solid var(--ink);
+      border-bottom: 0;
+      border-radius: 55px 55px 18px 18px;
+      z-index: 5;
+    }
+
+    .eye {
+      position: absolute;
+      top: 44px;
+      width: 12px;
+      height: 16px;
+      background: var(--ink);
+      border-radius: 50%;
+    }
+
+    .eye.left { left: 22px; }
+    .eye.right { right: 22px; }
+
+    .mouth {
+      position: absolute;
+      left: 34px;
+      top: 64px;
+      width: 34px;
+      height: 15px;
+      border: 4px solid var(--ink);
+      border-top: 0;
+      border-radius: 0 0 30px 30px;
+      background: #fff;
+    }
+
+    .mouth.yell {
+      width: 38px;
+      height: 28px;
+      left: 31px;
+      top: 58px;
+      border: 4px solid var(--ink);
+      border-radius: 50%;
+      background: #4b1f1f;
+    }
+
+    .body {
+      position: absolute;
+      left: 38px;
+      top: 94px;
+      width: 94px;
+      height: 106px;
+      border: 4px solid var(--ink);
+      border-radius: 25px 25px 16px 16px;
+      background: var(--shirt);
+      z-index: 2;
+    }
+
+    .shirt-text {
+      position: absolute;
+      inset: 35px 0 auto;
+      font-size: 20px;
+      font-weight: 900;
+      color: white;
+      letter-spacing: 1px;
+    }
+
+    .hand {
+      position: absolute;
+      top: 109px;
+      width: 38px;
+      height: 38px;
+      border: 4px solid var(--ink);
+      border-radius: 50%;
+      background: var(--skin);
+      z-index: 3;
+      transition: transform 250ms ease-in-out;
+    }
+
+    .hand.left {
+      left: 4px;
+      transform: translateY(0);
+    }
+
+    .hand.right {
+      right: 4px;
+      transform: translateY(0);
+    }
+
+    .arm {
+      position: absolute;
+      top: 111px;
+      width: 24px;
+      height: 90px;
+      border: 4px solid var(--ink);
+      border-radius: 20px;
+      background: var(--skin);
+      z-index: 1;
+      transform-origin: top center;
+      transition: transform 250ms ease-in-out;
+    }
+
+    .arm.left { left: 25px; transform: rotate(20deg); }
+    .arm.right { right: 25px; transform: rotate(-20deg); }
+
+    .character.action .arm.left,
+    .character.action .hand.left {
+      transform: translateY(-65px) rotate(-18deg);
+    }
+
+    .character.action .arm.right,
+    .character.action .hand.right {
+      transform: translateY(65px) rotate(18deg);
+    }
+
+    .character.reverse .arm.left,
+    .character.reverse .hand.left {
+      transform: translateY(65px) rotate(18deg);
+    }
+
+    .character.reverse .arm.right,
+    .character.reverse .hand.right {
+      transform: translateY(-65px) rotate(-18deg);
+    }
+
+    .burst {
+      position: absolute;
+      left: 50%;
+      top: 20px;
+      transform: translateX(-50%) scale(0.6);
+      font-size: clamp(32px, 7vw, 60px);
+      font-weight: 1000;
+      color: #ff3d71;
+      text-shadow:
+        3px 3px 0 white,
+        6px 6px 0 var(--ink);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .burst.show {
+      animation: pop 500ms ease-out forwards;
+    }
+
+    @keyframes pop {
+      0%   { opacity: 0; transform: translateX(-50%) scale(0.6) rotate(-5deg); }
+      20%  { opacity: 1; transform: translateX(-50%) scale(1.08) rotate(3deg); }
+      100% { opacity: 0; transform: translateX(-50%) scale(1.0) rotate(0deg); }
+    }
+
+    .shop {
+      margin-top: 18px;
+      padding: 16px;
+      background: rgba(255,255,255,0.92);
+      border: 3px solid var(--ink);
+      border-radius: 18px;
+      box-shadow: 0 7px 0 rgba(0,0,0,0.10);
+      text-align: left;
+    }
+
+    .shop h2 {
+      margin: 0 0 10px;
+      text-align: center;
+      font-size: 26px;
+    }
+
+    .shop-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .upgrade {
+      width: 100%;
+      min-height: 78px;
+      padding: 11px;
+      border: 3px solid var(--ink);
+      border-radius: 12px;
+      background: #fff;
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 4px 0 rgba(0,0,0,0.12);
+      transition: transform 100ms ease, opacity 100ms ease;
+    }
+
+    .upgrade:hover:not(:disabled) { transform: translateY(-2px); }
+    .upgrade:active:not(:disabled) { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.12); }
+    .upgrade:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .upgrade-title {
+      display: block;
+      font-weight: 900;
+      margin-bottom: 4px;
+    }
+
+    .upgrade-cost {
+      display: inline-block;
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .stats {
+      margin-top: 11px;
+      display: flex;
+      justify-content: center;
+      gap: 18px;
+      flex-wrap: wrap;
+      font-weight: 800;
+      font-size: 14px;
+    }
+
+    .hint {
+      margin-top: 16px;
+      font-weight: 700;
+      font-size: 17px;
+    }
+
+    @media (max-width: 620px) {
+      .shop-grid { grid-template-columns: 1fr; }
+    }
+
+    .hint kbd {
+      display: inline-block;
+      padding: 5px 9px;
+      border: 2px solid var(--ink);
+      border-bottom-width: 4px;
+      border-radius: 8px;
+      background: #fff;
+      font-family: inherit;
+    }
+
+    .flash {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    .flash.show {
+      animation: flash 180ms ease-out;
+    }
+
+    @keyframes flash {
+      0% { opacity: 0.4; background: white; }
+      100% { opacity: 0; background: white; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game">
+    <h1>SIX SEVEN!!</h1>
+
+    <div class="score-card" aria-live="polite">
+      <div class="score-label">SCORE</div>
+      <div id="score">0</div>
+    </div>
+
+    <section class="stage" id="stage">
+      <div class="flash" id="flash"></div>
+      <div class="burst" id="burst">SIX SEVEN!!</div>
+      <div class="floor-line"></div>
+
+      <div class="character" id="character" aria-label="Cartoon character">
+        <div class="hair"></div>
+        <div class="head">
+          <div class="eye left"></div>
+          <div class="eye right"></div>
+          <div class="mouth" id="mouth"></div>
+        </div>
+
+        <div class="arm left"></div>
+        <div class="arm right"></div>
+
+        <div class="body">
+          <div class="shirt-text">67</div>
+        </div>
+
+        <div class="hand left"></div>
+        <div class="hand right"></div>
+      </div>
+    </section>
+
+    <section class="shop">
+      <h2>Upgrade Shop</h2>
+      <div class="shop-grid">
+        <button class="upgrade" data-cost="25" data-type="click" data-value="1">
+          <span class="upgrade-title">+1 point per click</span>
+          <span class="upgrade-cost">Cost: 25</span>
+        </button>
+        <button class="upgrade" data-cost="100" data-type="second" data-value="1">
+          <span class="upgrade-title">+1 point per second</span>
+          <span class="upgrade-cost">Cost: 100</span>
+        </button>
+        <button class="upgrade" data-cost="300" data-type="click" data-value="5">
+          <span class="upgrade-title">+5 points per click</span>
+          <span class="upgrade-cost">Cost: 300</span>
+        </button>
+        <button class="upgrade" data-cost="500" data-type="second" data-value="5">
+          <span class="upgrade-title">+5 points per second</span>
+          <span class="upgrade-cost">Cost: 500</span>
+        </button>
+        <button class="upgrade" data-cost="1000" data-type="combo" data-value="10">
+          <span class="upgrade-title">+10 clicks/sec +10 points/click</span>
+          <span class="upgrade-cost">Cost: 1000</span>
+        </button>
+      </div>
+      <div class="stats">
+        <span>Per click: <strong id="perClick">1</strong></span>
+        <span>Per second: <strong id="perSecond">0</strong></span>
+        <span>Auto clicks/sec: <strong id="autoClicks">0</strong></span>
+      </div>
+    </section>
+
+    <div class="hint">Press <kbd>SPACE</kbd> to yell “SIX SEVEN!!”</div>
+  </main>
+
+  <script>
+    const scoreEl = document.getElementById("score");
+    const character = document.getElementById("character");
+    const burst = document.getElementById("burst");
+    const mouth = document.getElementById("mouth");
+    const flash = document.getElementById("flash");
+    const perClickEl = document.getElementById("perClick");
+    const perSecondEl = document.getElementById("perSecond");
+    const autoClicksEl = document.getElementById("autoClicks");
+    const upgradeButtons = [...document.querySelectorAll(".upgrade")];
+
+    let score = 0;
+    let pointsPerClick = 1;
+    let pointsPerSecond = 0;
+    let autoClicksPerSecond = 0;
+    let clickLocked = false;
+    const clickCooldownMs = 350;
+    let lastTick = performance.now();
+
+    // Speech is queued one yell at a time so fast clicks never overlap or cancel an unfinished yell.
+    const yellQueue = [];
+    let isYelling = false;
+
+    function playNextYell() {
+      if (!("speechSynthesis" in window) || isYelling || yellQueue.length === 0) return;
+
+      const text = yellQueue.shift();
+      const voice = new SpeechSynthesisUtterance(text);
+      voice.rate = 0.88;
+      voice.pitch = 0.95;
+      voice.volume = 1.0;
+
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v =>
+        /en-US|en-GB|en-AU/i.test(v.lang) &&
+        /male|david|alex|daniel|fred|google us english/i.test(v.name)
+      );
+      if (preferred) voice.voice = preferred;
+
+      isYelling = true;
+      voice.onend = () => {
+        isYelling = false;
+        playNextYell();
+      };
+      voice.onerror = () => {
+        isYelling = false;
+        playNextYell();
+      };
+      window.speechSynthesis.speak(voice);
+    }
+
+    function queueYell() {
+      if (!("speechSynthesis" in window)) return;
+      yellQueue.push("SIX SEVEN!!");
+      playNextYell();
+    }
+
+    function trigger() {
+      // Spacebar auto-repeat and ultra-fast clicks are ignored, so holding a key/mouse
+      // cannot generate an endless stream of points. A fresh click after the cooldown counts.
+      if (clickLocked) return;
+      clickLocked = true;
+
+      score += pointsPerClick;
+      updateUI();
+
+      queueYell();
+
+      character.classList.remove("reverse");
+      character.classList.add("action");
+      mouth.classList.add("yell");
+
+      burst.classList.remove("show");
+      void burst.offsetWidth;
+      burst.classList.add("show");
+
+      flash.classList.remove("show");
+      void flash.offsetWidth;
+      flash.classList.add("show");
+
+      // Reverse halfway through the ~0.5 second move.
+      setTimeout(() => {
+        character.classList.remove("action");
+        character.classList.add("reverse");
+      }, 250);
+
+      // Return to the neutral pose after ~0.5 seconds total.
+      setTimeout(() => {
+        character.classList.remove("reverse");
+        mouth.classList.remove("yell");
+      }, 500);
+
+      // Require a fresh press/click before another point can be earned.
+      setTimeout(() => {
+        clickLocked = false;
+      }, clickCooldownMs);
+    }
+
+    function updateUI() {
+      scoreEl.textContent = Math.floor(score);
+      perClickEl.textContent = pointsPerClick;
+      perSecondEl.textContent = pointsPerSecond;
+      autoClicksEl.textContent = autoClicksPerSecond;
+
+      for (const button of upgradeButtons) {
+        const cost = Number(button.dataset.cost);
+        button.disabled = score < cost;
+        button.querySelector(".upgrade-cost").textContent = `Cost: ${cost}`;
+      }
+    }
+
+    function buyUpgrade(button) {
+      const cost = Number(button.dataset.cost);
+      if (score < cost) return;
+
+      // Upgrades are intentionally repeatable forever: buy the same button
+      // again and again whenever the current score can cover its fixed cost.
+      score -= cost;
+
+      const type = button.dataset.type;
+      const value = Number(button.dataset.value);
+      if (type === "click") pointsPerClick += value;
+      if (type === "second") pointsPerSecond += value;
+      if (type === "combo") {
+        autoClicksPerSecond += value;
+        pointsPerClick += value;
+      }
+
+      updateUI();
+    }
+
+    upgradeButtons.forEach(button => {
+      button.addEventListener("click", () => buyUpgrade(button));
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.code === "Space") {
+        event.preventDefault();
+        if (!event.repeat) trigger();
+      }
+    });
+
+    // Mouse/touch clicks work too. Each click event is discrete, while the cooldown
+    // prevents repeated scoring from holding a key or rapidly hammering the control.
+    document.getElementById("stage").addEventListener("click", (event) => {
+      if (event.target.closest("button")) return;
+      trigger();
+    });
+
+    function gameTick(now) {
+      const elapsed = (now - lastTick) / 1000;
+      lastTick = now;
+
+      if (pointsPerSecond > 0) score += pointsPerSecond * elapsed;
+      if (autoClicksPerSecond > 0) {
+        // The 1000-point upgrade clicks automatically, but keeps the big yell
+        // animation from firing every frame. It simply adds the same click value.
+        score += autoClicksPerSecond * pointsPerClick * elapsed;
+      }
+
+      updateUI();
+      requestAnimationFrame(gameTick);
+    }
+
+    updateUI();
+    requestAnimationFrame(gameTick);
+
+    // Some browsers only populate voices after this event.
+    window.speechSynthesis?.addEventListener("voiceschanged", () => {
+      window.speechSynthesis.getVoices();
+    });
+  </script>
+</body>
+</html>

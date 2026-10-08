@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pitfall!</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #111;
+  color: #fff;
+  font-family: "Courier New", monospace;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  overflow: hidden;
+}
+#gameWrap { width: min(100vw, 1100px); padding: 12px; }
+#hud {
+  height: 58px;
+  background: #090909;
+  border: 3px solid #555;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  font-size: clamp(14px, 2vw, 22px);
+}
+#game {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #1d7a2c;
+  image-rendering: pixelated;
+  border-left: 3px solid #555;
+  border-right: 3px solid #555;
+  border-bottom: 3px solid #555;
+}
+#instructions { text-align: center; color: #bbb; margin-top: 10px; font-size: 14px; }
+#overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,.72); z-index: 10;
+}
+#panel {
+  width: min(90vw, 550px); background: #171717; border: 5px solid #777;
+  padding: 30px; text-align: center; box-shadow: 0 0 30px #000;
+}
+#panel h1 {
+  margin: 0 0 12px; color: #ffd84a; font-size: clamp(34px, 7vw, 68px);
+  text-shadow: 4px 4px #5c3d00; letter-spacing: 4px;
+}
+#panel p { color: #ddd; line-height: 1.6; }
+button {
+  margin-top: 12px; padding: 13px 25px; font: inherit; font-weight: bold;
+  color: #111; background: #ffd84a; border: 4px solid #8d6c00; cursor: pointer;
+}
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <div id="hud">
+    <div>SCORE: <span id="score">0</span></div>
+    <div>LIVES: <span id="lives">3</span></div>
+    <div>TIME: <span id="time">200</span></div>
+  </div>
+  <canvas id="game" width="1000" height="520"></canvas>
+  <div id="instructions">← / → Move &nbsp; | &nbsp; SPACE Jump / Double Jump &nbsp; | &nbsp; Avoid pits, fire, logs, scorpions &nbsp; | &nbsp; Grab treasure</div>
+</div>
+<div id="overlay">
+  <div id="panel">
+    <h1>PITFALL!</h1>
+    <p>Run through the jungle, collect treasure and survive the hazards.<br><br>Use the <b>ARROW KEYS</b> to move and <b>SPACE</b> to jump.</p>
+    <button id="startBtn">START GAME</button>
+  </div>
+</div>
+<script>
+"use strict";
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const livesEl = document.getElementById("lives");
+const timeEl = document.getElementById("time");
+const overlay = document.getElementById("overlay");
+const panel = document.getElementById("panel");
+ctx.imageSmoothingEnabled = false;
+
+const WORLD_WIDTH = 18000, GROUND_Y = 410, GRAVITY = 1800, PLAYER_SPEED = 260, JUMP_SPEED = 700, GAME_TIME = 200;
+const keys = {left:false, right:false, jump:false};
+window.addEventListener("keydown", e => {
+  if (["ArrowLeft","ArrowRight","Space"].includes(e.code)) e.preventDefault();
+  if (e.code === "ArrowLeft") keys.left = true;
+  if (e.code === "ArrowRight") keys.right = true;
+  if (e.code === "Space" && !e.repeat) {
+    keys.jump = true;
+    if (game.running && player.jumps < 2) {
+      player.vy = -JUMP_SPEED;
+      player.onGround = false;
+      player.jumps++;
+    }
+  }
+  if ((e.code === "Enter" || e.code === "Space") && !game.running) startGame();
+});
+window.addEventListener("keyup", e => {
+  if (e.code === "ArrowLeft") keys.left = false;
+  if (e.code === "ArrowRight") keys.right = false;
+  if (e.code === "Space") keys.jump = false;
+});
+function rand(min,max){return Math.random()*(max-min)+min}
+function clamp(v,min,max){return Math.max(min,Math.min(max,v))}
+function rectsOverlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+
+const hazards=[], treasures=[], scorpions=[], logs=[];
+function generateWorld(){
+  hazards.length=0; treasures.length=0; scorpions.length=0; logs.length=0;
+  let x=700;
+  while(x<WORLD_WIDTH-700){
+    const r=Math.random();
+    if(r<.28){
+      const w=rand(110,190); hazards.push({type:"pit",x,y:GROUND_Y+12,w,h:150}); x+=w+rand(220,420);
+    } else if(r<.48){
+      const w=rand(60,110); hazards.push({type:"fire",x,y:GROUND_Y-4,w,h:55}); x+=w+rand(220,400);
+    } else if(r<.65){
+      logs.push({x,y:GROUND_Y-28,w:70,h:28,speed:rand(90,150),startX:x,direction:Math.random()<.5?1:-1}); x+=rand(300,500);
+    } else x+=rand(250,450);
+  }
+  for(let i=0;i<45;i++) treasures.push({x:rand(800,WORLD_WIDTH-500),y:rand(270,370),w:30,h:25,collected:false,bob:rand(0,Math.PI*2)});
+  for(let i=0;i<26;i++) scorpions.push({x:rand(900,WORLD_WIDTH-500),y:GROUND_Y-18,w:38,h:18,speed:rand(25,55),direction:Math.random()<.5?-1:1});
+  treasures[0].x=900; treasures[0].y=350; treasures[1].x=1250; treasures[1].y=330; treasures[2].x=1600; treasures[2].y=345;
+}
+const player={x:150,y:GROUND_Y-58,w:36,h:58,vx:0,vy:0,onGround:true,jumps:0,invulnerable:0,anim:0};
+function resetPlayer(){player.x=150;player.y=GROUND_Y-player.h;player.vx=0;player.vy=0;player.onGround=true;player.jumps=0;player.invulnerable=1.5}
+const game={running:false,score:0,lives:3,timeLeft:GAME_TIME,cameraX:0,lastTime:0,flash:0,win:false};
+
+function startGame(){
+  generateWorld(); game.running=true; game.win=false; game.score=0; game.lives=3; game.timeLeft=GAME_TIME; game.cameraX=0; game.flash=0;
+  resetPlayer(); overlay.style.display="none"; scoreEl.textContent=game.score; livesEl.textContent=game.lives; timeEl.textContent=Math.ceil(game.timeLeft); game.lastTime=performance.now();
+}
+function endGame(won=false){
+  game.running=false; game.win=won;
+  panel.innerHTML=`<h1>${won?"YOU DID IT!":"GAME OVER"}</h1><p>Final Score: <b>${game.score}</b><br>${won?"You made it safely through the jungle!":"The jungle got the better of you!"}</p><button id="again">PLAY AGAIN</button>`;
+  panel.querySelector("#again").addEventListener("click",startGame); overlay.style.display="flex";
+}
+function hurtPlayer(){
+  if(player.invulnerable>0||!game.running)return;
+  game.lives--; player.invulnerable=2; game.flash=.35;
+  if(game.lives<=0){endGame(false);return}
+  resetPlayer(); livesEl.textContent=game.lives;
+}
+function update(dt){
+  if(!game.running)return;
+  game.timeLeft-=dt; if(game.timeLeft<=0){game.timeLeft=0;endGame(false);return}
+  player.invulnerable=Math.max(0,player.invulnerable-dt); game.flash=Math.max(0,game.flash-dt);
+  let moving=false;
+  if(keys.right){player.vx=PLAYER_SPEED;moving=true}else if(keys.left){player.vx=-PLAYER_SPEED;moving=true}else player.vx=0;
+  player.vy+=GRAVITY*dt; player.x+=player.vx*dt; player.y+=player.vy*dt; player.x=clamp(player.x,0,WORLD_WIDTH-player.w);
+  if(player.y+player.h>=GROUND_Y){player.y=GROUND_Y-player.h;player.vy=0;player.onGround=true;player.jumps=0}
+  player.anim+=dt*(moving?10:3);
+  for(const h of hazards){
+    if(h.type==="pit"){
+      const inside=player.x+player.w*.55>h.x&&player.x+player.w*.45<h.x+h.w;
+      if(inside&&player.y+player.h>=GROUND_Y&&player.x+player.w>h.x+10&&player.x<h.x+h.w-10){hurtPlayer();return}
+    } else if(rectsOverlap(player,h)){hurtPlayer();break}
+  }
+  for(const log of logs){
+    log.x+=log.speed*log.direction*dt; if(log.x<log.startX-100||log.x>log.startX+100)log.direction*=-1;
+    if(rectsOverlap(player,log)){hurtPlayer();break}
+  }
+  for(const s of scorpions){
+    s.x+=s.speed*s.direction*dt;
+    if(rectsOverlap(player,s)){hurtPlayer();break}
+  }
+  for(const t of treasures) if(!t.collected&&rectsOverlap(player,t)){t.collected=true;game.score+=250}
+  if(player.x>=WORLD_WIDTH-600){game.score+=Math.ceil(game.timeLeft)*10;endGame(true);return}
+  const target=player.x-canvas.width*.35; game.cameraX+= (target-game.cameraX)*Math.min(1,dt*6); game.cameraX=clamp(game.cameraX,0,WORLD_WIDTH-canvas.width);
+  scoreEl.textContent=game.score; livesEl.textContent=game.lives; timeEl.textContent=Math.ceil(game.timeLeft);
+}
+function drawBackground(){
+  const g=ctx.createLinearGradient(0,0,0,GROUND_Y); g.addColorStop(0,"#54bce8");g.addColorStop(1,"#a8e8ff");ctx.fillStyle=g;ctx.fillRect(0,0,canvas.width,GROUND_Y);
+  for(let i=0;i<7;i++){const x=((i*220-game.cameraX*.15)%1200+1200)%1200-100,y=60+(i%3)*45;ctx.fillStyle="#f5ffff";ctx.fillRect(x,y,85,20);ctx.fillRect(x+15,y-12,45,25);ctx.fillRect(x+55,y-7,30,20)}
+  ctx.fillStyle="#477d52";ctx.beginPath();ctx.moveTo(0,350);for(let x=0;x<=canvas.width;x+=70){const wx=x+game.cameraX*.35,y=305+Math.sin(wx*.008)*45;ctx.lineTo(x,y)}ctx.lineTo(canvas.width,GROUND_Y);ctx.lineTo(0,GROUND_Y);ctx.closePath();ctx.fill();
+  for(let i=0;i<15;i++){const x=((i*113-game.cameraX*.5)%1100+1100)%1100-50,y=250+(i%3)*35;ctx.fillStyle="#145a2a";ctx.fillRect(x,y,55,170);ctx.fillRect(x-15,y+15,85,30);ctx.fillRect(x+5,y-20,35,45)}
+  ctx.fillStyle="#228b36";ctx.fillRect(0,GROUND_Y,canvas.width,canvas.height-GROUND_Y);
+  ctx.fillStyle="#47a83e";for(let x=0;x<canvas.width;x+=18){const wx=x+Math.floor(game.cameraX);if(Math.sin(wx*2.7)>.25){ctx.fillRect(x,GROUND_Y+10,4,10);ctx.fillRect(x+5,GROUND_Y+6,3,13)}}
+}
+function drawPit(h){const x=h.x-game.cameraX;ctx.fillStyle="#3b2314";ctx.fillRect(x,GROUND_Y,h.w,canvas.height-GROUND_Y);ctx.fillStyle="#130b07";ctx.fillRect(x+10,GROUND_Y+12,h.w-20,90);ctx.fillStyle="#704624";for(let y=GROUND_Y;y<GROUND_Y+90;y+=14)ctx.fillRect(x,y,h.w,5)}
+function drawFire(h){const x=h.x-game.cameraX,f=Math.sin(performance.now()*.015+h.x)*7;ctx.fillStyle="#8f1d0e";ctx.fillRect(x,GROUND_Y+28,h.w,10);ctx.fillStyle="#ffb000";ctx.beginPath();ctx.moveTo(x+h.w*.5,GROUND_Y-25-f);ctx.lineTo(x+h.w*.18,GROUND_Y+30);ctx.lineTo(x+h.w*.48,GROUND_Y+15);ctx.lineTo(x+h.w*.7,GROUND_Y+30);ctx.lineTo(x+h.w*.9,GROUND_Y-5);ctx.closePath();ctx.fill();ctx.fillStyle="#ffe15a";ctx.beginPath();ctx.moveTo(x+h.w*.5,GROUND_Y-5-f);ctx.lineTo(x+h.w*.35,GROUND_Y+28);ctx.lineTo(x+h.w*.55,GROUND_Y+15);ctx.lineTo(x+h.w*.68,GROUND_Y+28);ctx.closePath();ctx.fill()}
+function drawLog(l){const x=l.x-game.cameraX;ctx.fillStyle="#623817";ctx.fillRect(x,l.y,l.w,l.h);ctx.fillStyle="#946034";ctx.fillRect(x+8,l.y+6,l.w-16,4);ctx.strokeStyle="#3b1f0c";ctx.lineWidth=4;ctx.beginPath();ctx.arc(x+8,l.y+l.h/2,11,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(x+l.w-8,l.y+l.h/2,11,0,Math.PI*2);ctx.stroke()}
+function drawScorpion(s){const x=s.x-game.cameraX;ctx.fillStyle="#201512";ctx.fillRect(x+8,s.y,22,12);ctx.fillRect(x,s.y+4,8,6);ctx.fillRect(x+30,s.y+4,8,6);for(let i=0;i<3;i++){ctx.fillRect(x+8+i*8,s.y+10,3,10);ctx.fillRect(x+26-i*8,s.y+10,3,10)}ctx.strokeStyle="#201512";ctx.lineWidth=4;ctx.beginPath();ctx.arc(x+26,s.y-4,12,.2*Math.PI,1.4*Math.PI);ctx.stroke();ctx.fillStyle="#d0d0d0";ctx.fillRect(x+11,s.y+3,4,4)}
+function drawTreasure(t){const x=t.x-game.cameraX,b=Math.sin(performance.now()*.004+t.bob)*4;ctx.fillStyle="#ffd129";ctx.fillRect(x,t.y+b,t.w,t.h);ctx.fillStyle="#a76500";ctx.fillRect(x+3,t.y+b+4,t.w-6,5);ctx.fillRect(x+11,t.y+b+9,8,12);ctx.fillStyle="#fff59a";ctx.fillRect(x+7,t.y+b+12,6,4)}
+function drawExit(){const x=WORLD_WIDTH-430-game.cameraX;ctx.fillStyle="#6f4e37";ctx.fillRect(x,210,18,200);ctx.fillRect(x+170,210,18,200);ctx.fillRect(x,210,188,18);ctx.fillStyle="#ffd740";ctx.font="bold 23px Courier New";ctx.fillText("HOME",x+52,190);ctx.fillStyle="#e41d2f";ctx.beginPath();ctx.moveTo(x+95,228);ctx.lineTo(x+148,242);ctx.lineTo(x+95,256);ctx.closePath();ctx.fill()}
+function drawPlayer(){
+  if(player.invulnerable>0&&Math.floor(player.invulnerable*12)%2===0)return;
+  const x=player.x-game.cameraX,y=player.y,running=Math.abs(player.vx)>1,leg=running?Math.sin(player.anim)*7:0;
+  ctx.fillStyle="#d79d27";ctx.fillRect(x+3,y+2,30,10);ctx.fillRect(x+9,y-6,18,10);
+  ctx.fillStyle="#e6a56b";ctx.fillRect(x+10,y+12,18,17);ctx.fillStyle="#ffe253";ctx.fillRect(x+8,y+28,21,18);
+  ctx.fillStyle="#e6a56b";ctx.fillRect(x+3,y+30,7,15);ctx.fillRect(x+28,y+30,7,15);
+  ctx.fillStyle="#3b2b1d";ctx.fillRect(x+9,y+44,7,14+leg);ctx.fillRect(x+21,y+44,7,14-leg);
+  ctx.fillStyle="#111";const d=player.vx<0?-1:1;ctx.fillRect(x+(d>0?23:10),y+18,3,3);ctx.fillRect(x+(d>0?27:7),y+22,4,3)
+}
+function drawWorld(){
+  drawBackground();
+  for(const h of hazards){if(h.x+h.w<game.cameraX-100||h.x>game.cameraX+canvas.width+100)continue;if(h.type==="pit")drawPit(h);else drawFire(h)}
+  for(const l of logs)if(l.x+l.w>game.cameraX-100&&l.x<game.cameraX+canvas.width+100)drawLog(l);
+  for(const s of scorpions)if(s.x+s.w>game.cameraX-100&&s.x<game.cameraX+canvas.width+100)drawScorpion(s);
+  for(const t of treasures)if(!t.collected&&t.x+t.w>game.cameraX-100&&t.x<game.cameraX+canvas.width+100)drawTreasure(t);
+  drawExit();drawPlayer();
+  if(player.x<500){ctx.fillStyle="#fff";ctx.font="bold 16px Courier New";ctx.fillText("START",100-game.cameraX,GROUND_Y-15)}
+  if(game.flash>0){ctx.fillStyle=`rgba(255,0,0,${game.flash*.4})`;ctx.fillRect(0,0,canvas.width,canvas.height)}
+}
+generateWorld(); drawWorld();
+function loop(now){const dt=Math.min((now-game.lastTime)/1000,.033);game.lastTime=now;update(dt);drawWorld();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

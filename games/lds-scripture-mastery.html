@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LDS Scripture Mastery Challenge</title>
+<style>
+  :root{
+    --ink:#2b2118;
+    --paper:#f4ead2;
+    --paper2:#fffaf0;
+    --gold:#c99a43;
+    --brown:#714d2e;
+    --green:#365845;
+    --red:#a24739;
+    --shadow:0 18px 50px rgba(24,18,12,.30);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    font-family: Georgia, "Times New Roman", serif;
+    color:var(--ink);
+    background:
+      radial-gradient(circle at 50% 15%, rgba(255,255,255,.16), transparent 28%),
+      linear-gradient(135deg,#6b492f 0%,#3f2b1d 45%,#6b492f 100%);
+    overflow:hidden;
+  }
+
+  /* The background is a stylized, self-contained "open quad" illustration. */
+  .quad-bg{
+    position:fixed; inset:-8%;
+    pointer-events:none;
+    opacity:.95;
+    filter:saturate(.85);
+  }
+  .desk{
+    position:absolute; left:0; right:0; bottom:0; height:44%;
+    background:
+      repeating-linear-gradient(90deg,rgba(255,255,255,.025) 0 3px,transparent 3px 105px),
+      linear-gradient(#523725,#2e1f16);
+    transform:perspective(900px) rotateX(62deg);
+    transform-origin:bottom;
+    box-shadow:inset 0 20px 50px rgba(0,0,0,.25);
+  }
+  .quad{
+    position:absolute; left:8%; right:8%; top:5%; bottom:13%;
+    transform:rotate(-1.5deg);
+    filter:drop-shadow(0 24px 24px rgba(0,0,0,.45));
+  }
+  .cover{
+    position:absolute; inset:0;
+    background:linear-gradient(135deg,#2c513b,#1e392b);
+    border-radius:18px;
+    box-shadow:inset 0 0 0 8px rgba(13,28,20,.45), inset 0 0 0 10px #967348;
+  }
+  .page{
+    position:absolute; top:2%; bottom:2%; width:49%;
+    background:
+      repeating-linear-gradient(0deg,rgba(109,80,43,.06) 0 1px,transparent 1px 22px),
+      linear-gradient(90deg,#e9dbbb,#fffaf0 55%,#e9ddc4);
+    box-shadow:inset 0 0 25px rgba(90,62,27,.18);
+    overflow:hidden;
+    padding:8% 7%;
+  }
+  .page.left{left:1.7%; transform:skewY(1.2deg); border-radius:12px 4px 4px 12px}
+  .page.right{right:1.7%; transform:skewY(-1.2deg); border-radius:4px 12px 12px 4px}
+  .fold{
+    position:absolute; left:49.2%; top:1%; bottom:1%; width:3%;
+    background:linear-gradient(90deg,rgba(70,45,20,.25),rgba(255,255,255,.55),rgba(70,45,20,.18));
+    border-radius:50%;
+  }
+  .page-head{
+    font-size:clamp(12px,1.5vw,20px); font-weight:700; letter-spacing:.08em;
+    text-align:center; color:#6c4e32; margin-bottom:10px;
+  }
+  .mini-title{
+    font-size:clamp(18px,2.3vw,30px); text-align:center; margin:0 0 12px;
+    font-weight:700; color:#3a2b1b;
+  }
+  .lines{
+    height:78%;
+    background:repeating-linear-gradient(0deg,transparent 0 17px,rgba(72,53,31,.16) 17px 18px);
+    opacity:.7;
+  }
+  .gold-mark{
+    position:absolute; left:11%; right:11%; height:14px; top:38%;
+    border-top:4px solid rgba(190,133,37,.42); border-bottom:4px solid rgba(190,133,37,.18);
+  }
+  .gold-mark.two{top:59%; left:20%; right:18%}
+
+  .veil{
+    position:fixed; inset:0;
+    background:rgba(26,18,11,.54);
+    backdrop-filter:blur(2px);
+  }
+
+  .app{
+    position:relative; z-index:2;
+    width:min(1180px,94vw); height:min(790px,94vh);
+    margin:3vh auto;
+    background:rgba(247,240,221,.96);
+    border:1px solid rgba(255,255,255,.35);
+    border-radius:26px;
+    box-shadow:var(--shadow);
+    overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+
+  header{
+    padding:20px 26px 16px;
+    background:linear-gradient(180deg,rgba(255,251,239,.98),rgba(239,227,200,.96));
+    border-bottom:1px solid rgba(86,61,34,.18);
+    display:flex; align-items:center; justify-content:space-between; gap:20px;
+  }
+  .brand{
+    display:flex; align-items:center; gap:14px;
+  }
+  .seal{
+    width:48px;height:48px;border-radius:50%;
+    display:grid;place-items:center;
+    background:radial-gradient(circle,#e3bd6d 0 42%,#9b6e2f 43% 48%,#355442 49%);
+    color:#fff; font-weight:700; font-size:20px;
+    box-shadow:0 4px 12px rgba(0,0,0,.18);
+  }
+  h1{margin:0;font-size:clamp(24px,3vw,36px);line-height:1}
+  .subtitle{margin:5px 0 0;color:#6d5841;font-size:14px}
+  .hud{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end;
+  }
+  .pill{
+    padding:9px 13px; border-radius:999px; background:#fffaf0;
+    border:1px solid rgba(79,57,33,.14); font-size:14px; font-weight:700;
+  }
+  .score-pill{color:var(--green)}
+  .streak-pill{color:#8b6221}
+
+  .progress{
+    height:7px;background:#dfd0b2;
+  }
+  .progress-fill{
+    height:100%; width:0;
+    background:linear-gradient(90deg,var(--green),#c49a4a);
+    transition:width .35s ease;
+  }
+
+  main{
+    flex:1; display:grid; grid-template-columns:1.05fr .95fr;
+    gap:0; min-height:0;
+  }
+  .left-panel,.right-panel{padding:28px;min-height:0}
+  .left-panel{
+    border-right:1px solid rgba(85,58,30,.14);
+    display:flex; flex-direction:column;
+    justify-content:center;
+  }
+  .round-label{
+    color:var(--green); font-size:13px; text-transform:uppercase; letter-spacing:.16em;
+    font-weight:700; margin-bottom:14px;
+  }
+  .prompt-card{
+    background:rgba(255,251,241,.88);
+    border:1px solid rgba(76,54,31,.16);
+    border-radius:20px;
+    padding:26px;
+    box-shadow:0 12px 30px rgba(73,49,27,.08);
+  }
+  .prompt-type{
+    display:inline-block; padding:6px 10px; border-radius:8px;
+    background:#e9ddc3;color:#72512f; font-size:12px; font-weight:700;
+    margin-bottom:14px;
+  }
+  .prompt{
+    font-size:clamp(21px,2.4vw,30px);
+    line-height:1.25; margin:0;
+  }
+  .prompt strong{color:#6b4a29}
+  .hint{
+    margin:14px 0 0; color:#765f47; font-size:14px; line-height:1.45;
+  }
+  .keyboard-tip{
+    margin-top:18px; color:#7d694f; font-size:13px;
+  }
+  kbd{
+    display:inline-grid;place-items:center;min-width:27px;height:27px;
+    padding:0 7px;border-radius:7px;background:#fff;border:1px solid #cdbd9e;
+    box-shadow:0 2px 0 #c4b294;font-family:inherit;font-weight:700;color:#4b3928;
+  }
+
+  .right-panel{
+    display:flex; flex-direction:column; justify-content:center;
+    background:linear-gradient(180deg,rgba(243,234,214,.72),rgba(255,250,239,.7));
+  }
+  .choose{
+    font-size:13px;text-transform:uppercase;letter-spacing:.14em;font-weight:700;color:#7b654c;
+    margin-bottom:13px;
+  }
+  .choices{display:grid;gap:12px}
+  .choice{
+    width:100%; border:1px solid rgba(78,56,31,.19);
+    background:#fffdf8; border-radius:16px;
+    padding:15px 16px; text-align:left;
+    font-family:inherit; color:var(--ink);
+    cursor:pointer; transition:.16s ease;
+    display:grid;grid-template-columns:38px 1fr;align-items:center;gap:12px;
+    min-height:67px;
+  }
+  .choice:hover{transform:translateY(-2px);box-shadow:0 7px 15px rgba(83,56,27,.10);border-color:#c7aa75}
+  .choice:active{transform:translateY(0)}
+  .letter{
+    width:34px;height:34px;border-radius:10px;background:#efe3ca;
+    display:grid;place-items:center;font-weight:700;color:#74502c;
+  }
+  .choice-text{font-size:15px;line-height:1.25}
+  .choice.correct{background:#e9f3ea;border-color:#80aa87}
+  .choice.correct .letter{background:#365845;color:#fff}
+  .choice.wrong{background:#f8e8e4;border-color:#c77a6b}
+  .choice.wrong .letter{background:#a24739;color:#fff}
+  .choice.disabled{pointer-events:none}
+
+  .feedback{
+    min-height:54px; margin-top:16px; padding:12px 14px; border-radius:12px;
+    background:rgba(255,251,239,.75); border:1px solid rgba(76,54,31,.11);
+    font-size:14px; line-height:1.4; color:#624d37;
+  }
+  .feedback b{color:var(--green)}
+
+  footer{
+    padding:12px 20px; border-top:1px solid rgba(85,58,30,.13);
+    display:flex; justify-content:space-between; align-items:center; gap:10px;
+    font-size:12px; color:#78634b;
+  }
+
+  .overlay{
+    position:absolute;inset:0;z-index:5;
+    background:linear-gradient(rgba(48,34,22,.74),rgba(36,26,17,.86));
+    display:flex; align-items:center; justify-content:center;
+    padding:24px;
+  }
+  .modal{
+    width:min(660px,94%); background:#fff9ec; border-radius:24px; padding:34px;
+    box-shadow:0 24px 70px rgba(0,0,0,.35); text-align:center;
+    border:1px solid rgba(255,255,255,.25);
+  }
+  .modal .big-seal{font-size:56px;line-height:1;margin-bottom:12px}
+  .modal h2{font-size:34px;margin:0 0 10px}
+  .modal p{color:#6f5942;line-height:1.5;margin:0 auto 20px;max-width:520px}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:20px 0}
+  .stat{background:#f2e7cf;border-radius:14px;padding:14px}
+  .stat .n{font-size:27px;font-weight:700;color:#34513d}
+  .stat .l{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:#7d674b}
+  .btn{
+    border:0;border-radius:13px;padding:13px 19px;cursor:pointer;
+    background:linear-gradient(180deg,#4d7058,#34513f); color:#fff;
+    font-family:inherit;font-size:16px;font-weight:700;
+    box-shadow:0 6px 14px rgba(52,81,63,.25);
+  }
+  .btn.alt{background:linear-gradient(180deg,#b4863f,#8d672f)}
+  .hidden{display:none!important}
+
+  .flash{
+    animation:flash .45s ease;
+  }
+  @keyframes flash{
+    0%{transform:scale(1)}
+    45%{transform:scale(1.018)}
+    100%{transform:scale(1)}
+  }
+  @media(max-width:860px){
+    body{overflow:auto}
+    .app{height:auto;min-height:94vh;margin:3vh auto}
+    main{grid-template-columns:1fr}
+    .left-panel{border-right:0;border-bottom:1px solid rgba(85,58,30,.14)}
+    .right-panel{padding-top:22px}
+  }
+  @media(max-width:540px){
+    header{padding:16px}
+    .left-panel,.right-panel{padding:18px}
+    .hud{gap:6px}
+    .pill{font-size:12px;padding:7px 10px}
+    .prompt-card{padding:20px}
+    .stats{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="quad-bg" aria-hidden="true">
+  <div class="desk"></div>
+  <div class="quad">
+    <div class="cover"></div>
+    <div class="page left">
+      <div class="page-head">THE BOOK OF MORMON</div>
+      <div class="mini-title">Another Testament of Jesus Christ</div>
+      <div class="lines"></div>
+      <div class="gold-mark"></div>
+      <div class="gold-mark two"></div>
+    </div>
+    <div class="page right">
+      <div class="page-head">HOLY SCRIPTURES</div>
+      <div class="mini-title">Doctrine & Covenants</div>
+      <div class="lines"></div>
+      <div class="gold-mark"></div>
+      <div class="gold-mark two"></div>
+    </div>
+    <div class="fold"></div>
+  </div>
+</div>
+<div class="veil"></div>
+
+<div class="app">
+  <header>
+    <div class="brand">
+      <div class="seal">✦</div>
+      <div>
+        <h1>Scripture Mastery Challenge</h1>
+        <div class="subtitle">10 rounds • 50-question mastery bank • highest score wins</div>
+      </div>
+    </div>
+    <div class="hud">
+      <div class="pill score-pill">Score: <span id="score">0</span></div>
+      <div class="pill streak-pill">Streak: <span id="streak">0</span></div>
+      <div class="pill">Round: <span id="round">0</span>/10</div>
+    </div>
+  </header>
+
+  <div class="progress"><div class="progress-fill" id="progress"></div></div>
+
+  <main id="game">
+    <section class="left-panel">
+      <div class="round-label">Scripture Mastery Prompt</div>
+      <div class="prompt-card" id="promptCard">
+        <div class="prompt-type" id="promptType">REFERENCE</div>
+        <p class="prompt" id="prompt">Press <strong>Start Challenge</strong> to begin.</p>
+        <p class="hint" id="hint">You will see a scripture reference, topic, or short scripture clue. Choose the matching answer.</p>
+      </div>
+      <div class="keyboard-tip">
+        Keyboard: <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> to choose &nbsp;•&nbsp; <kbd>R</kbd> to restart
+      </div>
+    </section>
+
+    <section class="right-panel">
+      <div class="choose">Choose the matching scripture</div>
+      <div class="choices" id="choices"></div>
+      <div class="feedback" id="feedback">Each correct answer earns <b>100 points</b>, plus a streak bonus. Missed answers break the streak.</div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Tip: Read the reference out loud in your head before choosing.</span>
+    <span>Top score comes from accuracy + streaks.</span>
+  </footer>
+
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <div class="big-seal">📖</div>
+      <h2 id="modalTitle">Ready to Master the Scriptures?</h2>
+      <p id="modalText">You have 10 rounds to build the highest score you can. Prompts are mixed between scripture references, short synopses, and exact wording from the passage. After each answer, the full correct reference is revealed and you must click to continue.</p>
+      <div class="stats hidden" id="finalStats">
+        <div class="stat"><div class="n" id="finalScore">0</div><div class="l">Final Score</div></div>
+        <div class="stat"><div class="n" id="finalCorrect">0/10</div><div class="l">Correct</div></div>
+        <div class="stat"><div class="n" id="finalBest">0</div><div class="l">Best Streak</div></div>
+      </div>
+      <button class="btn" id="startBtn">Start Challenge</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const QUESTIONS = [
+  // Book of Mormon — mostly mastery classics
+  {book:"Book of Mormon",ref:"1 Nephi 3:7",topic:"The Lord provides a way to accomplish what He commands.",answer:"1 Nephi 3:7",promptType:"SYNOPSIS",prompt:"When God gives a command, He also provides a way for His children to accomplish it.",verse:"And it came to pass that I, Nephi, said unto my father: I will go and do the things which the Lord hath commanded, for I know that the Lord giveth no commandments unto the children of men, save he shall prepare a way for them that they may accomplish the thing which he commandeth them.",note:"What scripture teaches that obedience is possible because God prepares the way?"},
+  {book:"Book of Mormon",ref:"2 Nephi 2:25",topic:"Men are that they might have joy.",answer:"2 Nephi 2:25",promptType:"CLUE",prompt:"“Men are, that they might have ___.”",note:"A foundational teaching from Lehi about agency and the purpose of life."},
+  {book:"Book of Mormon",ref:"2 Nephi 2:27",topic:"We are free to choose liberty and eternal life, or captivity and death.",answer:"2 Nephi 2:27",promptType:"TOPIC",prompt:"Agency: choosing liberty and eternal life, or captivity and death.",note:"Remember the choice-and-agency theme."},
+  {book:"Book of Mormon",ref:"2 Nephi 9:28–29",topic:"Learning is good when we hearken to God's counsel.",answer:"2 Nephi 9:28–29",promptType:"TOPIC",prompt:"Learning is valuable, but knowledge must be joined with God's counsel.",note:"Think “learned” versus “hearken unto the counsels of God.”"},
+  {book:"Book of Mormon",ref:"2 Nephi 25:26",topic:"We talk of Christ, rejoice in Christ, preach of Christ, and prophesy of Christ.",answer:"2 Nephi 25:26",promptType:"CLUE",prompt:"We “talk of Christ… rejoice in Christ… preach of Christ… [and] prophesy of Christ.”",note:"The answer begins with a 2 Nephi reference."},
+  {book:"Book of Mormon",ref:"2 Nephi 28:7–9",topic:"The false teaching that people can sin a little and still be saved.",answer:"2 Nephi 28:7–9",promptType:"TOPIC",prompt:"A warning against the idea that a little sin is harmless because God will forgive everyone.",note:"Look for the “eat, drink, and be merry” warning."},
+  {book:"Book of Mormon",ref:"2 Nephi 31:20",topic:"Press forward with a steadfastness in Christ, feasting upon the word of Christ.",answer:"2 Nephi 31:20",promptType:"CLUE",prompt:"Press forward with a steadfastness in Christ, having a perfect brightness of hope.",note:"This one ends with enduring to the end."},
+  {book:"Book of Mormon",ref:"Mosiah 2:17",topic:"When we are in the service of our fellow beings, we are only in the service of God.",answer:"Mosiah 2:17",promptType:"CLUE",prompt:"“When ye are in the service of your fellow beings ye are only in the service of your God.”",note:"A favorite service scripture."},
+  {book:"Book of Mormon",ref:"Mosiah 3:19",topic:"The natural man must yield to the enticings of the Holy Spirit.",answer:"Mosiah 3:19",promptType:"TOPIC",prompt:"Put off the natural man and become a saint through the Atonement of Christ.",note:"Think humility, meekness, patience, love, and submission to the Spirit."},
+  {book:"Book of Mormon",ref:"Mosiah 4:30",topic:"Watch yourselves, thoughts, words, and deeds, and continue in faith.",answer:"Mosiah 4:30",promptType:"TOPIC",prompt:"Guard your thoughts, words, and deeds so they remain righteous.",note:"A “watch yourselves” scripture."},
+  {book:"Book of Mormon",ref:"Alma 5:14",topic:"Being spiritually born again and receiving His image in your countenance.",answer:"Alma 5:14",promptType:"TOPIC",prompt:"Have you experienced a mighty change in your heart and received His image in your countenance?",note:"The “mighty change” scripture."},
+  {book:"Book of Mormon",ref:"Alma 7:11–12",topic:"Christ takes upon Him pains, sicknesses, infirmities, and temptations.",answer:"Alma 7:11–12",promptType:"TOPIC",prompt:"Christ knows how to succor His people because He experienced mortal pains, sicknesses, and temptations.",note:"A key Atonement-and-compassion passage."},
+  {book:"Book of Mormon",ref:"Alma 32:21",topic:"Faith is hope for things not seen which are true.",answer:"Alma 32:21",promptType:"CLUE",prompt:"Faith is not a perfect knowledge; it is hope for things which are not seen, but are true.",note:"A definition of faith from Alma."},
+  {book:"Book of Mormon",ref:"Alma 34:32",topic:"This life is the time to prepare to meet God.",answer:"Alma 34:32",promptType:"TOPIC",prompt:"This life is the time to prepare to meet God.",note:"Think “day of this life… day of repentance… prepare.”"},
+  {book:"Book of Mormon",ref:"Helaman 5:12",topic:"Build your foundation on the rock of Christ.",answer:"Helaman 5:12",promptType:"CLUE",prompt:"Build your foundation upon the rock of our Redeemer, who is Christ.",note:"The foundation/rock scripture."},
+  {book:"Book of Mormon",ref:"3 Nephi 11:10–11",topic:"Christ declares Himself to the people in the Americas.",answer:"3 Nephi 11:10–11",promptType:"TOPIC",prompt:"Jesus Christ identifies Himself after appearing to the people in the land of Bountiful.",note:"He teaches that He has suffered the Father's will."},
+  {book:"Book of Mormon",ref:"3 Nephi 11:29",topic:"The spirit of contention is of the devil.",answer:"3 Nephi 11:29",promptType:"CLUE",prompt:"The spirit of contention is not of Christ; it is of the devil.",note:"Contention → 3 Nephi 11."},
+  {book:"Book of Mormon",ref:"3 Nephi 12:48",topic:"Be perfect, even as the Father in Heaven is perfect.",answer:"3 Nephi 12:48",promptType:"CLUE",prompt:"“Therefore I would that ye should be perfect even as I…”",note:"Sermon at the temple in the Book of Mormon."},
+  {book:"Book of Mormon",ref:"3 Nephi 17:21",topic:"Jesus ministers individually to children and blesses them.",answer:"3 Nephi 17:21",promptType:"TOPIC",prompt:"Jesus takes the children one by one and blesses them.",note:"A tender scene from Christ's ministry in the Americas."},
+  {book:"Book of Mormon",ref:"Ether 12:27",topic:"God gives weakness so we may be humble and turn weakness into strength.",answer:"Ether 12:27",promptType:"TOPIC",prompt:"God can make weak things become strong when we humble ourselves and exercise faith.",note:"Think weakness → humility → strength."},
+  {book:"Book of Mormon",ref:"Moroni 10:4–5",topic:"Ask God with real intent and receive a spiritual witness of truth.",answer:"Moroni 10:4–5",promptType:"CLUE",prompt:"Ask God with a sincere heart and real intent, having faith in Christ.",note:"The classic “know by the power of the Holy Ghost” scripture."},
+  {book:"Book of Mormon",ref:"Moroni 10:32",topic:"Come unto Christ and be perfected in Him.",answer:"Moroni 10:32",promptType:"TOPIC",prompt:"Come unto Christ, deny yourselves of all ungodliness, and love God with all your might.",note:"The closing invitation of the Book of Mormon."},
+  {book:"Book of Mormon",ref:"Moroni 10:33",topic:"Through Christ's grace, we can be sanctified and perfected.",answer:"Moroni 10:33",promptType:"TOPIC",prompt:"Christ's grace can sanctify and perfect those who love God with all their might.",note:"The companion to Moroni 10:32."},
+  {book:"Book of Mormon",ref:"Mosiah 18:8–10",topic:"Bear one another's burdens, mourn with those that mourn, and comfort those in need.",answer:"Mosiah 18:8–10",promptType:"TOPIC",prompt:"A baptismal covenant to bear burdens, mourn, comfort, and stand as witnesses of God.",note:"Alma teaches these covenant promises at the Waters of Mormon."},
+  {book:"Book of Mormon",ref:"Jacob 2:18–19",topic:"Seek the kingdom of God first; use riches to do good.",answer:"Jacob 2:18–19",promptType:"TOPIC",prompt:"Seek first the kingdom of God; if you obtain riches, use them to bless others.",note:"A stewardship-and-riches teaching."},
+  {book:"Book of Mormon",ref:"1 Nephi 19:23",topic:"Apply scripture to ourselves for profit and learning.",answer:"1 Nephi 19:23",promptType:"CLUE",prompt:"Nephi likens the scriptures unto his people so they might profit and learn.",note:"“Likening” the scriptures to ourselves."},
+
+  // Doctrine & Covenants
+  {book:"Doctrine and Covenants",ref:"D&C 6:36",topic:"Look unto Christ in every thought; doubt not, fear not.",answer:"D&C 6:36",promptType:"CLUE",prompt:"“Look unto me in every thought; doubt not, fear not.”",note:"Short, memorable, and directly tied to faith over fear."},
+  {book:"Doctrine and Covenants",ref:"D&C 8:2–3",topic:"The Spirit speaks to the mind and heart; by this power Moses led Israel.",answer:"D&C 8:2–3",promptType:"TOPIC",prompt:"Revelation can come through the mind and heart by the Spirit of truth.",note:"Associated with the “burning bush” / Moses example."},
+  {book:"Doctrine and Covenants",ref:"D&C 10:4",topic:"Do not run faster or labor more than you have strength.",answer:"D&C 10:4",promptType:"CLUE",prompt:"“Do not run faster or labor more than you have strength…”",note:"A scripture about pacing yourself in the work."},
+  {book:"Doctrine and Covenants",ref:"D&C 11:12",topic:"Put your trust in the Spirit that leads to do good, righteous judgment, humility, and love.",answer:"D&C 11:12",promptType:"TOPIC",prompt:"Trust the Spirit that leads to do good and judge righteously.",note:"A guidance-and-Spirit scripture."},
+  {book:"Doctrine and Covenants",ref:"D&C 18:10",topic:"The worth of souls is great in the sight of God.",answer:"D&C 18:10",promptType:"CLUE",prompt:"“Remember the worth of souls is great in the sight of God.”",note:"One of the best-known D&C verses."},
+  {book:"Doctrine and Covenants",ref:"D&C 19:16–19",topic:"Christ describes His suffering and Atonement.",answer:"D&C 19:16–19",promptType:"TOPIC",prompt:"Christ describes His suffering for the sins of the world.",note:"A powerful first-person account of the Atonement."},
+  {book:"Doctrine and Covenants",ref:"D&C 25:13",topic:"Cleave unto covenants and let your heart rejoice.",answer:"D&C 25:13",promptType:"CLUE",prompt:"“Cleave unto the covenants which thou hast made…”",note:"A revelation to Emma Smith."},
+  {book:"Doctrine and Covenants",ref:"D&C 42:61",topic:"If you ask, you shall receive revelation upon revelation and knowledge upon knowledge.",answer:"D&C 42:61",promptType:"CLUE",prompt:"Ask, and you will receive revelation “upon revelation, knowledge upon knowledge.”",note:"Think continuing revelation."},
+  {book:"Doctrine and Covenants",ref:"D&C 58:27",topic:"Be anxiously engaged in a good cause and do many things of your own free will.",answer:"D&C 58:27",promptType:"TOPIC",prompt:"Use agency to do many good things of your own free will.",note:"A classic agency-and-initiative passage."},
+  {book:"Doctrine and Covenants",ref:"D&C 64:33",topic:"Be not weary in well-doing; lay your foundation and great things shall come.",answer:"D&C 64:33",promptType:"CLUE",prompt:"“Be not weary in well-doing, for ye are laying the foundation of a great work.”",note:"Keep going when good work feels slow."},
+  {book:"Doctrine and Covenants",ref:"D&C 84:35",topic:"Those who receive priesthood receive the Father and Son.",answer:"D&C 84:35",promptType:"TOPIC",prompt:"Those who receive the priesthood receive the Lord's servants and ultimately the Father and Son.",note:"Think oath/covenant and priesthood blessings."},
+  {book:"Doctrine and Covenants",ref:"D&C 88:118",topic:"Seek learning by study and also by faith.",answer:"D&C 88:118",promptType:"CLUE",prompt:"“Seek ye out of the best books words of wisdom; seek learning, even by study and also by faith.”",note:"A favorite learning scripture."},
+  {book:"Doctrine and Covenants",ref:"D&C 121:7–8",topic:"Adversity is temporary; God will give experience and lift us up.",answer:"D&C 121:7–8",promptType:"TOPIC",prompt:"In difficult times, remember that adversity is for a small moment and God can exalt you.",note:"A Joseph Smith Liberty Jail passage."},
+  {book:"Doctrine and Covenants",ref:"D&C 121:36–37",topic:"Priesthood power depends on righteous principles, not compulsion.",answer:"D&C 121:36–37",promptType:"TOPIC",prompt:"Priesthood power or influence must be exercised by persuasion, long-suffering, gentleness, and love.",note:"Power versus unrighteous dominion."},
+  {book:"Doctrine and Covenants",ref:"D&C 122:7",topic:"Tribulation gives experience and will work for your good.",answer:"D&C 122:7",promptType:"CLUE",prompt:"“All these things shall give thee experience, and shall be for thy good.”",note:"Another Liberty Jail classic."},
+
+  // Pearl of Great Price
+  {book:"Pearl of Great Price",ref:"Moses 1:39",topic:"God's work and glory is to bring to pass the immortality and eternal life of man.",answer:"Moses 1:39",promptType:"CLUE",prompt:"“This is my work and my glory—to bring to pass the immortality and eternal life of man.”",note:"One of the signature verses of the Pearl of Great Price."},
+  {book:"Pearl of Great Price",ref:"Abraham 3:25",topic:"Earth life is a proving ground to see whether we will do what God commands.",answer:"Abraham 3:25",promptType:"TOPIC",prompt:"God's purpose for mortal testing: prove whether His children will do what He commands.",note:"Think “prove them now.”"},
+  {book:"Pearl of Great Price",ref:"Moses 6:57",topic:"The natural man is an enemy to God unless he yields to the Holy Spirit.",answer:"Moses 6:57",promptType:"TOPIC",prompt:"A warning about the natural man and the need to become clean through the Spirit.",note:"A Pearl of Great Price parallel to teachings in Mosiah."},
+  {book:"Pearl of Great Price",ref:"Joseph Smith—History 1:15–17",topic:"The First Vision and Heavenly Father and Jesus Christ appearing to Joseph Smith.",answer:"Joseph Smith—History 1:15–17",promptType:"TOPIC",prompt:"Joseph Smith prays in the Sacred Grove and sees the Father and the Son.",note:"The First Vision account."},
+  {book:"Pearl of Great Price",ref:"Joseph Smith—History 1:29–33",topic:"The angel Moroni appears to Joseph Smith and teaches about the coming record.",answer:"Joseph Smith—History 1:29–33",promptType:"TOPIC",prompt:"An angel named Moroni appears and speaks of the Book of Mormon and latter-day events.",note:"The Moroni visit."},
+
+  // New Testament
+  {book:"New Testament",ref:"Matthew 5:48",topic:"Be ye therefore perfect.",answer:"Matthew 5:48",promptType:"CLUE",prompt:"“Be ye therefore perfect, even as your Father which is in heaven is perfect.”",note:"Part of the Sermon on the Mount."},
+  {book:"New Testament",ref:"Matthew 11:28–30",topic:"Christ invites those who labor and are heavy laden to come unto Him.",answer:"Matthew 11:28–30",promptType:"TOPIC",prompt:"Christ invites the weary to come unto Him and learn of Him.",note:"Think yoke, rest, and meekness."},
+  {book:"New Testament",ref:"Matthew 16:15–19",topic:"Peter testifies that Jesus is the Christ and receives priesthood keys.",answer:"Matthew 16:15–19",promptType:"TOPIC",prompt:"Peter identifies Jesus as the Christ; the Savior speaks of keys and revelation.",note:"“Thou art the Christ…”"},
+  {book:"New Testament",ref:"Matthew 22:37–39",topic:"Love God and love your neighbor.",answer:"Matthew 22:37–39",promptType:"CLUE",prompt:"The two great commandments: love God with all your heart and love your neighbor as yourself.",note:"Two great commandments."},
+  {book:"New Testament",ref:"John 3:5",topic:"Be born of water and of the Spirit.",answer:"John 3:5",promptType:"CLUE",prompt:"“Except a man be born of water and of the Spirit, he cannot enter into the kingdom of God.”",note:"Nicodemus asks Jesus about being born again."},
+  {book:"New Testament",ref:"John 14:15",topic:"If ye love me, keep my commandments.",answer:"John 14:15",promptType:"CLUE",prompt:"“If ye love me, keep my commandments.”",note:"Simple connection between love and obedience."},
+  {book:"New Testament",ref:"John 15:12",topic:"Love one another as Christ has loved us.",answer:"John 15:12",promptType:"TOPIC",prompt:"Christ's command: love one another as I have loved you.",note:"A discipleship standard."},
+  {book:"New Testament",ref:"Romans 8:28",topic:"All things work together for good to them that love God.",answer:"Romans 8:28",promptType:"TOPIC",prompt:"God can work all things together for good for those who love Him.",note:"A classic hope-and-trust scripture."},
+  {book:"New Testament",ref:"1 Corinthians 10:13",topic:"God provides a way to escape temptation.",answer:"1 Corinthians 10:13",promptType:"TOPIC",prompt:"God is faithful and provides a way to escape every temptation.",note:"Temptation does not make obedience impossible."},
+  {book:"New Testament",ref:"1 Corinthians 15:40–42",topic:"Different bodies and glories; resurrection brings differing glories.",answer:"1 Corinthians 15:40–42",promptType:"TOPIC",prompt:"Paul teaches about different heavenly and earthly glories in connection with resurrection.",note:"“Glory” is the key concept."},
+
+  // Old Testament — smaller set
+  {book:"Old Testament",ref:"Joshua 1:9",topic:"Be strong and of a good courage; the Lord is with thee.",answer:"Joshua 1:9",promptType:"CLUE",prompt:"“Be strong and of a good courage; be not afraid…”",note:"Joshua receives a charge before leading Israel."},
+  {book:"Old Testament",ref:"Proverbs 3:5–6",topic:"Trust in the Lord and acknowledge Him; He will direct your paths.",answer:"Proverbs 3:5–6",promptType:"TOPIC",prompt:"Trust the Lord rather than leaning only on your own understanding.",note:"A very common wisdom scripture."},
+  {book:"Old Testament",ref:"Isaiah 1:18",topic:"Though sins be as scarlet, they can become white as snow.",answer:"Isaiah 1:18",promptType:"CLUE",prompt:"“Though your sins be as scarlet, they shall be as white as snow.”",note:"A forgiveness and cleansing image."},
+  {book:"Old Testament",ref:"Isaiah 53:3–5",topic:"The Messiah is wounded for our transgressions and bears our griefs.",answer:"Isaiah 53:3–5",promptType:"TOPIC",prompt:"A prophecy describing the suffering Servant bearing our griefs and transgressions.",note:"A famous Messianic prophecy."},
+  {book:"Old Testament",ref:"Daniel 2:44",topic:"God will set up a kingdom that shall never be destroyed.",answer:"Daniel 2:44",promptType:"TOPIC",prompt:"God establishes a kingdom that will never be destroyed or left to another people.",note:"Think latter-day kingdom and Daniel's interpretation."},
+  {book:"Old Testament",ref:"Malachi 3:8–10",topic:"Tithing; bring the tithes into the storehouse.",answer:"Malachi 3:8–10",promptType:"TOPIC",prompt:"A promise and command about tithes, the storehouse, and opening the windows of heaven.",note:"The classic tithing passage."}
+];
+
+const TOTAL_ROUNDS = 10;
+const LETTERS = ["A","B","C","D"];
+
+let round = 0;
+let score = 0;
+let streak = 0;
+let bestStreak = 0;
+let correct = 0;
+let current = null;
+let answered = false;
+let roundSet = [];
+let currentPromptMode = null;
+
+const $ = id => document.getElementById(id);
+
+function shuffle(arr){
+  const copy = [...arr];
+  for(let i=copy.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [copy[i],copy[j]]=[copy[j],copy[i]];
+  }
+  return copy;
+}
+
+function makeRoundSet(){
+  // Favor Book of Mormon while guaranteeing variety.
+  const bom = QUESTIONS.filter(q=>q.book==="Book of Mormon");
+  const dnc = QUESTIONS.filter(q=>q.book==="Doctrine and Covenants");
+  const pogp = QUESTIONS.filter(q=>q.book==="Pearl of Great Price");
+  const nt = QUESTIONS.filter(q=>q.book==="New Testament");
+  const ot = QUESTIONS.filter(q=>q.book==="Old Testament");
+  const picked = [
+    ...shuffle(bom).slice(0,5),
+    ...shuffle(dnc).slice(0,2),
+    ...shuffle(pogp).slice(0,1),
+    ...shuffle(nt).slice(0,1),
+    ...shuffle(ot).slice(0,1)
+  ];
+  return shuffle(picked).slice(0,TOTAL_ROUNDS);
+}
+
+function distractorsFor(answer){
+  const sameBook = QUESTIONS.filter(q=>q.ref!==answer.ref && q.book===answer.book);
+  const other = QUESTIONS.filter(q=>q.ref!==answer.ref && q.book!==answer.book);
+  const pool = shuffle([...sameBook,...other]);
+  const seen = new Set();
+  const out = [];
+  for(const q of pool){
+    if(q.answer!==answer.answer && !seen.has(q.answer)){
+      seen.add(q.answer); out.push(q.answer);
+      if(out.length===3) break;
+    }
+  }
+  return shuffle([answer.answer,...out]);
+}
+
+function startGame(){
+  round=0; score=0; streak=0; bestStreak=0; correct=0;
+  roundSet=makeRoundSet();
+  $("overlay").classList.add("hidden");
+  $("finalStats").classList.add("hidden");
+  $("startBtn").textContent="Start Challenge";
+  updateHud();
+  nextRound();
+}
+
+function getPromptMode(q, idx){
+  // Deliberately mixed: reference, synopsis, and exact wording tied to the main point.
+  const modes = ["REFERENCE", "SYNOPSIS", "WORDING"];
+  return modes[idx % modes.length];
+}
+
+function buildPrompt(q, idx){
+  const mode = getPromptMode(q, idx);
+  if(mode === "REFERENCE"){
+    return {
+      label:"REFERENCE",
+      text:`What is the main point of <strong>${q.ref}</strong>?`,
+      hint:"Choose the statement that best captures what this scripture teaches.",
+      mode
+    };
+  }
+  if(mode === "WORDING"){
+    // Use the exact wording field where present; otherwise use a neutral wording clue
+    // based on the topic without naming the answer or book.
+    const wording = q.verse || q.prompt;
+    return {
+      label:"SCRIPTURE WORDING",
+      text:`Which main point is expressed by this scripture wording?<div style="margin-top:12px;font-size:.72em;line-height:1.45;color:#684f35;">“${wording}”</div>`,
+      hint:"Choose the main teaching expressed by the words above.",
+      mode
+    };
+  }
+  return {
+    label:"SYNOPSIS",
+    text:q.prompt || q.topic,
+    hint:"Choose the scripture reference that best matches this teaching.",
+    mode
+  };
+}
+
+function nextRound(){
+  if(round>=TOTAL_ROUNDS){
+    endGame();
+    return;
+  }
+  current=roundSet[round];
+  answered=false;
+  const built=buildPrompt(current, round);
+  currentPromptMode=built.mode;
+  $("round").textContent=String(round+1);
+  $("score").textContent=score;
+  $("streak").textContent=streak;
+  $("progress").style.width=((round/TOTAL_ROUNDS)*100)+"%";
+  $("promptType").textContent=built.label;
+  $("prompt").innerHTML=built.text;
+  $("hint").textContent=built.hint;
+
+  const choices = $("choices");
+  choices.innerHTML="";
+  distractorsFor(current).forEach((text,i)=>{
+    const btn=document.createElement("button");
+    btn.className="choice";
+    btn.dataset.index=i;
+    btn.innerHTML=`<span class="letter">${LETTERS[i]}</span><span class="choice-text">${text}</span>`;
+    btn.addEventListener("click",()=>choose(i));
+    choices.appendChild(btn);
+  });
+  $("feedback").innerHTML='Choose an answer. You will see the full scripture reference after you answer.';
+  $("promptCard").classList.remove("flash");
+  void $("promptCard").offsetWidth;
+  $("promptCard").classList.add("flash");
+}
+
+function choose(index){
+  if(answered) return;
+  answered=true;
+  const buttons=[...document.querySelectorAll(".choice")];
+  const chosen=buttons[index];
+  const correctIndex=buttons.findIndex(b=>b.querySelector(".choice-text").textContent===current.answer);
+  const isCorrect=index===correctIndex;
+
+  if(isCorrect){
+    correct++;
+    streak++;
+    bestStreak=Math.max(bestStreak,streak);
+    const bonus=(streak-1)*25;
+    score += 100 + bonus;
+    chosen.classList.add("correct");
+    $("feedback").innerHTML=`<b>Correct!</b> The full reference is <strong>${current.ref}</strong> — ${current.book}. +${100+bonus} points${bonus?` (${bonus} streak bonus)`:''}.`;
+  }else{
+    streak=0;
+    chosen.classList.add("wrong");
+    buttons[correctIndex].classList.add("correct");
+    $("feedback").innerHTML=`<b>Not quite.</b> The full reference was <strong>${current.ref}</strong> — ${current.book}. Your streak resets to 0.`;
+  }
+
+  updateHud();
+  $("progress").style.width=((round+1)/TOTAL_ROUNDS*100)+"%";
+  buttons.forEach(b=>b.classList.add("disabled"));
+
+  // Require the player to click before moving on.
+  const next=document.createElement("button");
+  next.className="btn next-btn";
+  next.textContent=round+1>=TOTAL_ROUNDS ? "See Final Score" : "Next Question →";
+  next.style.marginTop="12px";
+  next.addEventListener("click",()=>{
+    round++;
+    next.remove();
+    nextRound();
+  });
+  $("feedback").appendChild(document.createElement("br"));
+  $("feedback").appendChild(next);
+}
+
+function updateHud(){
+  $("score").textContent=score;
+  $("streak").textContent=streak;
+  $("round").textContent=round;
+}
+
+function endGame(){
+  $("progress").style.width="100%";
+  $("finalScore").textContent=score;
+  $("finalCorrect").textContent=`${correct}/${TOTAL_ROUNDS}`;
+  $("finalBest").textContent=bestStreak;
+  let title="Challenge Complete!";
+  if(score>=1350) title="Scripture Mastery! 🔥";
+  else if(score>=1100) title="Excellent Work!";
+  else if(score>=850) title="Great Job!";
+  else if(score>=600) title="Nice Start!";
+  $("modalTitle").textContent=title;
+  $("modalText").textContent=getFinalMessage(score,correct);
+  $("finalStats").classList.remove("hidden");
+  $("startBtn").textContent="Play Again";
+  $("overlay").classList.remove("hidden");
+}
+
+function getFinalMessage(s,c){
+  if(c===10) return "Perfect 10/10. You know these scriptures cold!";
+  if(c>=8) return "Strong showing. A little more repetition and you'll have these references locked in.";
+  if(c>=6) return "Nice work. Revisit the ones you missed, then run it again.";
+  return "Good first pass. Scripture mastery is built one verse at a time — try again and beat your score!";
+}
+
+$("startBtn").addEventListener("click",startGame);
+
+document.addEventListener("keydown",e=>{
+  const key=e.key.toLowerCase();
+  if(key==="r"){
+    startGame();
+    return;
+  }
+  if($("overlay").classList.contains("hidden") && !answered && ["1","2","3","4"].includes(e.key)){
+    choose(Number(e.key)-1);
+  }
+  if(!$("overlay").classList.contains("hidden") && e.key==="Enter"){
+    startGame();
+  }
+});
+
+updateHud();
+</script>
+</body>
+</html>

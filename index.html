@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PP7 Deacon's Quorum Arcade</title>
+<meta name="description" content="Games made by the PP7 deacons quorum.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>PP7 Deacon's<span class="q">Quorum Arcade</span></h1>
+  <p class="tag">Games made by the deacons &bull; <span class="blink">INSERT COIN</span></p>
+</header>
+<main><div class="grid" id="grid"></div></main>
+<footer>Click a game to play. Press &larr; Back to Arcade to come home.</footer>
+<script src="games.js"></script>
+<script>
+  const grid = document.getElementById("grid");
+  for (const g of window.GAMES) {
+    const a = document.createElement("a");
+    a.className = "tile";
+    a.href = "play.html?g=" + encodeURIComponent(g.slug);
+    const img = document.createElement("img");
+    img.src = g.shot; img.alt = g.title + " screenshot"; img.loading = "lazy";
+    const cap = document.createElement("div"); cap.className = "cap";
+    const h = document.createElement("h2"); h.textContent = g.title; cap.appendChild(h);
+    if (g.maker) { const p = document.createElement("p"); p.textContent = "by " + g.maker; cap.appendChild(p); }
+    const s = document.createElement("span"); s.className = "play"; s.textContent = "\u25B6 PLAY"; cap.appendChild(s);
+    a.append(img, cap);
+    grid.appendChild(a);
+  }
+</script>
+</body>
+</html>

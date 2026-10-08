@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Temple Chess — Indiana Jones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2a1c10;
+    --gold: #d4a017;
+    --gold-bright: #f0c84a;
+    --good: #1f6b34;
+    --bad: #9b2c2c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--ink);
+    font-family: "Source Sans 3", "Segoe UI", sans-serif;
+    background:
+      radial-gradient(900px 480px at 50% -10%, rgba(240, 200, 74, 0.2), transparent 55%),
+      linear-gradient(180deg, #3a2414 0%, #1a120c 42%, #0e1a14 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .wrap {
+    width: min(1080px, 100%);
+    background: linear-gradient(180deg, rgba(243,226,192,0.98), rgba(226,201,148,0.97));
+    border: 4px solid #6b4a24;
+    border-radius: 18px;
+    box-shadow: 0 18px 50px rgba(40, 22, 8, 0.45), inset 0 0 0 2px #c9a15b;
+    position: relative;
+    overflow: hidden;
+  }
+  .wrap::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border: 1px dashed rgba(92, 58, 30, 0.35);
+    border-radius: 12px;
+    pointer-events: none;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    padding: 16px 22px 8px;
+    position: relative;
+    z-index: 1;
+  }
+  h1 {
+    font-family: Cinzel, Georgia, serif;
+    font-size: clamp(22px, 3vw, 34px);
+    margin: 0;
+    color: #4a2c12;
+  }
+  h1 span { color: #8a5a16; }
+  .tag { font-size: 12px; letter-spacing: 2px; text-transform: uppercase; color: #7a5630; margin-top: 2px; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .pill {
+    background: #3d2816;
+    color: #f6e7c4;
+    border-radius: 999px;
+    padding: 7px 14px;
+    min-width: 92px;
+    text-align: center;
+    box-shadow: inset 0 0 0 1px #c9a15b;
+  }
+  .pill b { display: block; font-family: Cinzel, serif; font-size: 18px; color: var(--gold-bright); }
+  .pill small { letter-spacing: 1px; text-transform: uppercase; font-size: 10px; opacity: 0.85; }
+  main {
+    display: grid;
+    grid-template-columns: minmax(280px, 480px) 1fr;
+    gap: 18px;
+    padding: 8px 22px 22px;
+    position: relative;
+    z-index: 1;
+  }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .board-panel { display: flex; flex-direction: column; align-items: center; }
+  .coords { display: grid; grid-template-columns: 22px 1fr; gap: 4px; width: min(100%, 480px); }
+  .files { display: grid; grid-template-columns: repeat(8, 1fr); text-align: center; color: #6a4a28; font-weight: 700; font-size: 13px; margin-top: 4px; }
+  .ranks { display: grid; grid-template-rows: repeat(8, 1fr); color: #6a4a28; font-weight: 700; font-size: 13px; text-align: center; }
+  .ranks span { display: flex; align-items: center; justify-content: center; }
+  .board {
+    width: 100%;
+    aspect-ratio: 1;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    border: 6px solid #4a3018;
+    border-radius: 4px;
+    box-shadow: 0 8px 0 #2b1a0d, 0 14px 24px rgba(0,0,0,0.28);
+    overflow: hidden;
+  }
+  .sq {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(28px, 5.4vw, 44px);
+    line-height: 1;
+    user-select: none;
+    position: relative;
+    cursor: pointer;
+  }
+  .light { background: #f3ddb0; }
+  .dark { background: #b58863; }
+  .sq.selected { box-shadow: inset 0 0 0 4px #2f6b3a; }
+  .sq.last { box-shadow: inset 0 0 0 4px #d4a017; }
+  .sq.dot::after, .sq.cap::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .sq.dot::after { width: 18%; height: 18%; background: rgba(47, 107, 58, 0.75); }
+  .sq.cap::after { width: 72%; height: 72%; border: 4px solid rgba(139, 46, 31, 0.8); }
+  .white-piece { color: #fffaf0; text-shadow: 0 1px 0 #5a3b1c, 0 0 3px #3a2412, 0 0 1px #3a2412; }
+  .black-piece { color: #1a100c; text-shadow: 0 1px 0 rgba(255,255,255,0.35); }
+  .turn { margin-top: 10px; font-weight: 700; color: #4a2c12; text-align: center; }
+  .side {
+    background: rgba(255, 248, 230, 0.55);
+    border: 1px solid rgba(92, 58, 30, 0.25);
+    border-radius: 14px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .prompt { font-family: Cinzel, Georgia, serif; font-size: clamp(22px, 3vw, 30px); margin: 0; color: #6b3b12; }
+  .story, .hint { margin: 0; line-height: 1.45; }
+  .hint { font-size: 13px; color: #6a5034; }
+  .chamber-name { font-weight: 700; color: #6b3b12; margin: 0; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font-family: Cinzel, Georgia, serif;
+    background: linear-gradient(#c4892a, #8d5a16);
+    color: #fff8e8;
+    border: 0;
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 16px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 #5c3a12;
+  }
+  button:hover { filter: brightness(1.06); }
+  button.ghost { background: transparent; color: #5c3a1e; box-shadow: none; border: 2px solid #8a6436; }
+  .feedback {
+    min-height: 120px;
+    border-radius: 12px;
+    padding: 12px;
+    background: rgba(61, 40, 22, 0.08);
+    border: 1px solid rgba(92, 58, 30, 0.15);
+  }
+  .feedback h3 { margin: 0 0 6px; font-family: Cinzel, serif; }
+  .score-good { color: var(--good); }
+  .score-bad { color: var(--bad); }
+  .score-mid { color: #8a5a16; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 14px; }
+  .legend div { background: rgba(255,248,230,0.7); border-radius: 8px; padding: 4px 8px; }
+  .screen { padding: 28px 26px 32px; text-align: center; position: relative; z-index: 1; }
+  .screen h2 { font-family: Cinzel, serif; font-size: clamp(28px, 5vw, 46px); margin: 8px 0 6px; color: #4a2c12; }
+  .idol { font-size: 54px; }
+  .rank { font-family: Cinzel, serif; font-size: 28px; color: #8a5a16; margin: 8px 0; }
+  .hidden { display: none !important; }
+  footer { text-align: center; font-size: 12px; color: #7a5a38; padding: 0 16px 14px; position: relative; z-index: 1; }
+  .recap-item { padding: 6px 0; border-bottom: 1px solid rgba(92,58,30,0.15); }
+  .promo {
+    position: absolute;
+    inset: 0;
+    background: rgba(28, 16, 8, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+  }
+  .promo box, .promo .card {
+    background: #f6e7c8;
+    border: 3px solid #6b4a24;
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+  }
+  .promo p { margin: 0 0 10px; font-family: Cinzel, serif; }
+  .promo button { margin: 4px; font-size: 22px; min-width: 52px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section id="start" class="screen">
+    <div class="idol">🗿</div>
+    <div class="tag">Chamber of the Moving Idols</div>
+    <h2>Temple Chess</h2>
+    <p style="max-width:660px;margin:0 auto 14px;font-size:18px;line-height:1.45;">
+      Dr. Jones, the floor is a giant chessboard. Click your piece, then click where it should go.
+      Only legal chess moves are allowed. The best move scores <b>+10</b>. A blunder can cost <b>−10</b>.
+      Ten chambers. No clock.
+    </p>
+    <p class="hint">You play the light pieces. Green dots are empty squares. Red rings are captures. Castle by moving the king two squares.</p>
+    <p style="margin-top:18px;"><button id="begin">Enter the Temple</button></p>
+  </section>
+
+  <section id="game" class="hidden">
+    <header>
+      <div>
+        <div class="tag">Indiana Jones · Puzzle Run</div>
+        <h1>Make the <span>best move</span></h1>
+      </div>
+      <div class="stats">
+        <div class="pill"><b id="roundLabel">1 / 10</b><small>Chamber</small></div>
+        <div class="pill"><b id="scoreLabel">0</b><small>Relic score</small></div>
+      </div>
+    </header>
+    <main>
+      <div class="board-panel">
+        <div class="coords">
+          <div class="ranks" id="ranks"></div>
+          <div>
+            <div class="board" id="board"></div>
+            <div class="files"><span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span></div>
+          </div>
+        </div>
+        <div class="turn" id="turnLabel">You play White — click a light piece</div>
+      </div>
+      <div class="side">
+        <p class="chamber-name" id="chamberName"></p>
+        <p class="prompt">Make the best move</p>
+        <p class="story" id="story"></p>
+        <div class="legend">
+          <div>♔ your king</div><div>♚ black king</div>
+          <div>♕ your queen</div><div>♛ black queen</div>
+          <div>♖ your rook</div><div>♜ black rook</div>
+          <div>♗ your bishop</div><div>♝ black bishop</div>
+          <div>♘ your knight</div><div>♞ black knight</div>
+          <div>♙ your pawn</div><div>♟ black pawn</div>
+        </div>
+        <p class="hint">Light pieces are yours. They move by chess rules: knights jump, bishops take diagonals, rooks take ranks and files, queens do both, pawns capture diagonally, kings move one square.</p>
+        <div class="feedback" id="feedback">
+          <h3>The idol is watching…</h3>
+          <p>Click one of your pieces, then click a highlighted square.</p>
+        </div>
+        <div class="row">
+          <button class="ghost" id="skip" type="button">Skip chamber (−3)</button>
+          <button class="hidden" id="next" type="button">Next puzzle</button>
+        </div>
+      </div>
+    </main>
+    <footer>Click to move · legal moves only · 10 chambers · no timer</footer>
+  </section>
+
+  <section id="end" class="screen hidden">
+    <div class="idol" id="endIdol">🏆</div>
+    <div class="tag">Expedition complete</div>
+    <h2 id="endTitle">You made it out</h2>
+    <div class="rank" id="rank"></div>
+    <p id="endCopy" style="max-width:660px;margin:0 auto 8px;font-size:18px;"></p>
+    <p><b id="finalScore"></b></p>
+    <div id="recap" style="max-width:680px;margin:14px auto;text-align:left;"></div>
+    <p><button id="again">Raid the temple again</button></p>
+  </section>
+
+  <div id="promo" class="promo hidden">
+    <div class="card">
+      <p>Promote the pawn</p>
+      <button data-p="Q">♕</button>
+      <button data-p="R">♖</button>
+      <button data-p="B">♗</button>
+      <button data-p="N">♘</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const GLYPH = { K:"♔", Q:"♕", R:"♖", B:"♗", N:"♘", P:"♙", k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" };
+const NAMES = { K:"King", Q:"Queen", R:"Rook", B:"Bishop", N:"Knight", P:"Pawn" };
+
+const ROUNDS = [
+  {
+    name: "Scholar’s Spike",
+    story: "Your queen on h5 and bishop on c4 already eye f7. Finish the chamber.",
+    board: ["r.bqk..r","pppp.ppp","..n..n..","....p...","..B....Q","........","PPPP.PPP","RNB.K.NR"],
+    best: "Qxf7#",
+    bestKey: "h5f7",
+    answers: {
+      h5f7: { score: 10, note: "Queen takes on f7 is checkmate. The bishop on c4 protects her, and the king has nowhere to go." },
+      c4f7: { score: 4, note: "Bishop takes f7 is only a check. Black can take the bishop or step away. The queen capture was mate." },
+      h5e5: { score: 1, note: "You grab a pawn and miss mate on f7." },
+      h5e8: { score: 2, note: "Queen takes on e8 is check, but not the clean mate, and the queen can be answered." }
+    },
+    fallback: { score: -4, note: "That lets the trap reset. Queen takes f7 was checkmate." }
+  },
+  {
+    name: "Snake Fork",
+    story: "The knight on e4 can bite the king and the queen at the same time.",
+    board: ["r...k..r","ppp..ppp","..n.....","...q....","....N...","........","PPPP.PPP","R.B.KB.R"],
+    best: "Nf6+",
+    bestKey: "e4f6",
+    answers: {
+      e4f6: { score: 10, note: "Knight to f6 checks the king and attacks the queen on d5. Black must save the king, then the queen falls." },
+      e4c3: { score: 3, note: "A normal knight retreat. The fork on f6 was the treasure." },
+      e4d2: { score: 2, note: "The knight steps back and misses king and queen." },
+      e4g3: { score: 3, note: "Safe, but not the double attack." },
+      e4c5: { score: 4, note: "The knight jumps forward, but f6 was the fork." },
+      e4d6: { score: 6, note: "Check, good eyes — but the queen on d5 is not attacked. f6 forks both." },
+      e4g5: { score: 4, note: "A knight jump that does not win the queen." }
+    },
+    fallback: { score: -3, note: "From e4 the knight should jump to f6, forking king and queen." }
+  },
+  {
+    name: "Back-Rank Boulder",
+    story: "The king on g8 is stuck behind pawns on f7, g7, and h7. A rook on the back rank ends it.",
+    board: ["......k.",".....ppp","........","........","........","........",".PP..PP.","R...K..R"],
+    best: "Ra8#",
+    bestKey: "a1a8",
+    answers: {
+      a1a8: { score: 10, note: "Rook to a8 is checkmate. It sweeps the 8th rank, and the pawns block f7, g7, and h7." },
+      h1h8: { score: 10, note: "Rook to h8 is also checkmate. Same boulder from the other side." },
+      a1a7: { score: 2, note: "You invade, but it is not mate." },
+      h1h7: { score: 2, note: "The rook lands on h7, and the king is not mated." },
+      e1d1: { score: -2, note: "The king steps aside and walks past mate." },
+      e1f1: { score: -2, note: "King move. Ra8 or Rh8 was mate." }
+    },
+    fallback: { score: -5, note: "Slide a rook to a8 or h8. That is mate." }
+  },
+  {
+    name: "Loose Relic",
+    story: "The black rook on a5 has no guard. Unguarded treasure does not stay long.",
+    board: ["....k...","ppp..ppp","..n.....","r.......","........","........","PPP..PPP","R.BQK..R"],
+    best: "Rxa5",
+    bestKey: "a1a5",
+    answers: {
+      a1a5: { score: 10, note: "Your rook takes the loose rook. The king on e8 cannot reach a5, and nothing else defends it." },
+      a1a3: { score: 1, note: "You use the open file, but stop before the capture." },
+      a1a4: { score: 1, note: "Almost. The rook is on a5." },
+      d1d2: { score: -2, note: "Queen shuffle. The free rook was on a5." },
+      e1d2: { score: -4, note: "King walk, and the relic stays on a5." }
+    },
+    fallback: { score: -4, note: "Take the rook on a5 with your a1 rook." }
+  },
+  {
+    name: "The Idol Promotes",
+    story: "Your pawn on a7 is one step from the altar. Turn it into a queen.",
+    board: [".......k","P.......","........","........","........","........","........","....K..."],
+    best: "a8=Q",
+    bestKey: "a7a8q",
+    answers: {
+      a7a8q: { score: 10, note: "Pawn to a8 becomes a queen, with check. That is the strongest promotion." },
+      a7a8r: { score: 6, note: "A rook still checks, but a queen is the bigger idol." },
+      a7a8b: { score: 2, note: "A bishop is a small prize on a promotion square, and it does not check." },
+      a7a8n: { score: 1, note: "A knight does not check the king on h8 from a8." },
+      e1d1: { score: -6, note: "You hesitate, and the pawn never reaches the altar." },
+      e1d2: { score: -6, note: "King move. Promote the pawn." },
+      e1f1: { score: -6, note: "King move. The pawn was ready." },
+      e1f2: { score: -6, note: "King move. Push a7 to a8 and choose a queen." },
+      e1e2: { score: -6, note: "King move. Promotion was the whole chamber." }
+    },
+    fallback: { score: -5, note: "Push the pawn to a8 and promote to a queen." }
+  },
+  {
+    name: "Hidden Whip",
+    story: "Your rook on e1 is blocked only by your knight. Move the knight to f6 and the whip cracks.",
+    board: ["....k...","ppp..ppp","........","...q....","....N...","........","PPPP.PPP","....R.K."],
+    best: "Nf6+",
+    bestKey: "e4f6",
+    answers: {
+      e4f6: { score: 10, note: "Knight to f6 discovers check from the rook and attacks the queen on d5." },
+      e4d6: { score: 7, note: "Discovered check, good. f6 is better because it also wins the queen." },
+      e4c5: { score: 6, note: "The rook checks once the knight leaves the file. f6 also attacks the queen." },
+      e4g5: { score: 6, note: "Discovered check, but the queen escapes." },
+      e4c3: { score: 6, note: "Discovered check. The fork on f6 was the full treasure." },
+      e4g3: { score: 6, note: "Discovered check, second best family. f6 attacks d5." },
+      e4d2: { score: 5, note: "The knight uncovers the rook. f6 was the double hit." },
+      e1e2: { score: -4, note: "Moving the rook gives up the discovered check." },
+      e1e3: { score: -4, note: "The rook steps into its own knight. Jump the knight instead." }
+    },
+    fallback: { score: -3, note: "Jump the knight off the e-file. Nf6+ is best." }
+  },
+  {
+    name: "Skewer on the Rope Bridge",
+    story: "The king on a5 stands in front of the queen on a8. Check on the a-file.",
+    board: ["q.......","........","........","k.......","........","........","........","R...K..."],
+    best: "Ra3+",
+    bestKey: "a1a3",
+    answers: {
+      a1a3: { score: 10, note: "Rook check. The king must step off the file, and then you can take the queen on a8." },
+      a1a2: { score: 8, note: "Also a skewer check. After the king moves, the queen is loose." },
+      a1a4: { score: -8, note: "The rook lands next to the king with no protection. The king can take it." },
+      a1a6: { score: -2, note: "That square is past the king, so the rook cannot leap over him." }
+    },
+    fallback: { score: -4, note: "Play the rook to a3 or a2 with check. Do not drop it beside the king." }
+  },
+  {
+    name: "Queen of the Temple",
+    story: "The king on g8 is boxed in by f7, g7, and h7. Your queen can reach the back rank.",
+    board: ["......k.",".....ppp","........","........","........","........","........","...Q.K.."],
+    best: "Qd8#",
+    bestKey: "d1d8",
+    answers: {
+      d1d8: { score: 10, note: "Queen to d8 is checkmate. She covers the back rank, and the pawns block the king." },
+      d1h5: { score: 4, note: "Queen to h5 is check, but the king still has squares. d8 was mate." },
+      d1d5: { score: 3, note: "A check up the board, not mate." },
+      d1d4: { score: 2, note: "The queen steps out. d8 finishes the chamber." },
+      d1a4: { score: 3, note: "Diagonal check. The back-rank mate was immediate." },
+      f1e1: { score: -2, note: "King shuffle. The queen mate was ready." },
+      f1e2: { score: -3, note: "The king wanders. Slide the queen to d8." },
+      f1g1: { score: -2, note: "King move. Qd8 was mate." },
+      f1g2: { score: -3, note: "King move. Qd8 was mate." },
+      f1f2: { score: -2, note: "King move. Qd8 was mate." }
+    },
+    fallback: { score: -4, note: "Slide the queen to d8. That is mate." }
+  },
+  {
+    name: "Knight Grabs the Map",
+    story: "The black queen on d4 has no guard. Your knight on f3 can take the map.",
+    board: ["r...k..r","ppp..ppp","..n.....","........","...q....",".....N..","PPPP.PPP","R..QKB.R"],
+    best: "Nxd4",
+    bestKey: "f3d4",
+    answers: {
+      f3d4: { score: 10, note: "Knight takes the unguarded queen. Nothing recaptures." },
+      f3e5: { score: 1, note: "The knight moves and leaves the queen sitting there." },
+      f3g5: { score: 1, note: "A jump away from the free queen." },
+      f3h4: { score: 1, note: "The map was on d4." },
+      f3d2: { score: -2, note: "Retreat. Nxd4 wins a queen." },
+      f3g1: { score: -2, note: "Back to the start. Take the queen." },
+      f3h2: { score: -2, note: "The knight hides. The queen was free." },
+      d1d2: { score: -1, note: "Queen move. The knight was the piece that attacks d4." },
+      e1e2: { score: -6, note: "The king steps in front of your own pieces and ignores a free queen." }
+    },
+    fallback: { score: -5, note: "Knight from f3 takes the queen on d4." }
+  },
+  {
+    name: "Escape the Falling Ceiling",
+    story: "You are not in check. Castle kingside: king to g1, rook to f1. That tucks the king away and wakes the rook.",
+    board: ["r...k..r","pppp.ppp","........","q.......","........","........","PPPP.PPP","RNB.K..R"],
+    best: "O-O",
+    bestKey: "e1g1",
+    answers: {
+      e1g1: { score: 10, note: "Castle kingside. The king leaves the center and the h1 rook swings to f1." },
+      g1f3: { score: 7, note: "Developing the knight is a strong second choice." },
+      g1e2: { score: 4, note: "The knight develops, but castling was cleaner." },
+      g1h3: { score: 3, note: "A knight on the rim. O-O was best." },
+      d2d3: { score: 3, note: "A small pawn move. Castling was the plan." },
+      e2e3: { score: 3, note: "Solid, but the king is still in the center." },
+      c2c3: { score: 2, note: "Quiet. Castle instead." },
+      e1d1: { score: -2, note: "The king steps toward the queen on a5. Castle to g1." },
+      e1f1: { score: -1, note: "The king steps aside, but castling also brings the rook over." },
+      b1c3: { score: 5, note: "Developing is useful. Castling was still the best single move." },
+      b1a3: { score: 1, note: "Knight on the rim. O-O was better." },
+      c1d2: { score: 4, note: "The bishop develops. Castling was the priority." },
+      c1e3: { score: 2, note: "This bishop move is not possible past your own pawn. If you got here, the bishop found a square — still castle next time." },
+      c1f4: { score: 3, note: "Bishop out. The king still belongs on g1." },
+      c1g5: { score: 3, note: "Active bishop. Castling was safer." },
+      c1h6: { score: 1, note: "The bishop bites granite. O-O was the move." }
+    },
+    fallback: { score: -3, note: "Move the king from e1 to g1 to castle." }
+  }
+];
+
+const files = "abcdefgh";
+let round = 0, score = 0, locked = false, log = [];
+let grid = [], selected = null, legal = [], pending = null;
+
+const boardEl = document.getElementById("board");
+const ranksEl = document.getElementById("ranks");
+for (let r = 8; r >= 1; r--) {
+  const s = document.createElement("span");
+  s.textContent = r;
+  ranksEl.appendChild(s);
+}
+
+function cloneBoard(rows) {
+  return rows.map(row => row.split("").map(ch => ch === "." ? null : ch));
+}
+function colorOf(p) { return p && p === p.toUpperCase() ? "w" : "b"; }
+function sqName(r, c) { return files[c] + (8 - r); }
+function findKing(bd, color) {
+  const k = color === "w" ? "K" : "k";
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) if (bd[r][c] === k) return [r, c];
+  return null;
+}
+function onBoard(r, c) { return r >= 0 && r < 8 && c >= 0 && c < 8; }
+
+function attacked(bd, r, c, byColor) {
+  const pawnDir = byColor === "w" ? 1 : -1;
+  for (const dc of [-1, 1]) {
+    const rr = r + pawnDir, cc = c + dc;
+    if (onBoard(rr, cc) && bd[rr][cc] === (byColor === "w" ? "P" : "p")) return true;
+  }
+  const knight = [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]];
+  for (const [dr, dc] of knight) {
+    const rr = r + dr, cc = c + dc;
+    if (onBoard(rr, cc) && bd[rr][cc] === (byColor === "w" ? "N" : "n")) return true;
+  }
+  const king = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  for (const [dr, dc] of king) {
+    const rr = r + dr, cc = c + dc;
+    if (onBoard(rr, cc) && bd[rr][cc] === (byColor === "w" ? "K" : "k")) return true;
+  }
+  const rays = [
+    { dr: -1, dc: 0, slide: "RQ" },
+    { dr: 1, dc: 0, slide: "RQ" },
+    { dr: 0, dc: -1, slide: "RQ" },
+    { dr: 0, dc: 1, slide: "RQ" },
+    { dr: -1, dc: -1, slide: "BQ" },
+    { dr: -1, dc: 1, slide: "BQ" },
+    { dr: 1, dc: -1, slide: "BQ" },
+    { dr: 1, dc: 1, slide: "BQ" }
+  ];
+  for (const ray of rays) {
+    let rr = r + ray.dr, cc = c + ray.dc;
+    while (onBoard(rr, cc)) {
+      const p = bd[rr][cc];
+      if (p) {
+        if (colorOf(p) === byColor && ray.slide.includes(p.toUpperCase())) return true;
+        break;
+      }
+      rr += ray.dr; cc += ray.dc;
+    }
+  }
+  return false;
+}
+function inCheck(bd, color) {
+  const k = findKing(bd, color);
+  if (!k) return false;
+  return attacked(bd, k[0], k[1], color === "w" ? "b" : "w");
+}
+function applyMove(bd, move) {
+  const next = bd.map(row => row.slice());
+  const p = next[move.r][move.c];
+  next[move.r][move.c] = null;
+  if (move.castle) {
+    const rookFrom = move.castle === "K" ? 7 : 0;
+    const rookTo = move.castle === "K" ? 5 : 3;
+    next[move.tr][rookTo] = next[move.tr][rookFrom];
+    next[move.tr][rookFrom] = null;
+  }
+  next[move.tr][move.tc] = move.promo ? (colorOf(p) === "w" ? move.promo : move.promo.toLowerCase()) : p;
+  return next;
+}
+function pseudo(bd, r, c) {
+  const p = bd[r][c];
+  if (!p) return [];
+  const mine = colorOf(p);
+  const moves = [];
+  const add = (tr, tc, extra) => {
+    if (!onBoard(tr, tc)) return;
+    const t = bd[tr][tc];
+    if (t && colorOf(t) === mine) return;
+    moves.push(Object.assign({ r, c, tr, tc, capture: !!t }, extra));
+  };
+  const slide = (dr, dc) => {
+    let tr = r + dr, tc = c + dc;
+    while (onBoard(tr, tc)) {
+      if (!bd[tr][tc]) add(tr, tc);
+      else { add(tr, tc); break; }
+      tr += dr; tc += dc;
+    }
+  };
+  const U = p.toUpperCase();
+  if (U === "N") [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => add(r+dr, c+dc));
+  if (U === "K") {
+    [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc]) => add(r+dr, c+dc));
+    if (mine === "w" && r === 7 && c === 4 && p === "K" && !inCheck(bd, "w")) {
+      if (!bd[7][5] && !bd[7][6] && bd[7][7] === "R" && !attacked(bd, 7, 5, "b") && !attacked(bd, 7, 6, "b"))
+        moves.push({ r, c, tr: 7, tc: 6, capture: false, castle: "K" });
+      if (!bd[7][1] && !bd[7][2] && !bd[7][3] && bd[7][0] === "R" && !attacked(bd, 7, 2, "b") && !attacked(bd, 7, 3, "b"))
+        moves.push({ r, c, tr: 7, tc: 2, capture: false, castle: "Q" });
+    }
+  }
+  if (U === "R" || U === "Q") [[-1,0],[1,0],[0,-1],[0,1]].forEach(([dr,dc]) => slide(dr, dc));
+  if (U === "B" || U === "Q") [[-1,-1],[-1,1],[1,-1],[1,1]].forEach(([dr,dc]) => slide(dr, dc));
+  if (U === "P") {
+    const dir = mine === "w" ? -1 : 1;
+    const start = mine === "w" ? 6 : 1;
+    if (onBoard(r+dir, c) && !bd[r+dir][c]) {
+      add(r+dir, c);
+      if (r === start && !bd[r+2*dir][c]) add(r+2*dir, c);
+    }
+    for (const dc of [-1, 1]) {
+      const tr = r + dir, tc = c + dc;
+      if (onBoard(tr, tc) && bd[tr][tc] && colorOf(bd[tr][tc]) !== mine) add(tr, tc);
+    }
+  }
+  return moves;
+}
+function legalMovesFrom(bd, r, c) {
+  const p = bd[r][c];
+  if (!p || colorOf(p) !== "w") return [];
+  return pseudo(bd, r, c).filter(m => !inCheck(applyMove(bd, m), "w"));
+}
+function moveKey(m) {
+  let k = sqName(m.r, m.c) + sqName(m.tr, m.tc);
+  if (m.promo) k += m.promo.toLowerCase();
+  return k;
+}
+function pretty(m) {
+  const p = grid[m.r][m.c];
+  const name = NAMES[p.toUpperCase()];
+  const to = sqName(m.tr, m.tc);
+  if (m.castle === "K") return "Castle kingside (king e1 to g1, rook h1 to f1)";
+  if (m.castle === "Q") return "Castle queenside";
+  if (m.promo) return name + " " + sqName(m.r, m.c) + " to " + to + ", promote to " + NAMES[m.promo];
+  if (m.capture) return name + " " + sqName(m.r, m.c) + " takes on " + to;
+  return name + " " + sqName(m.r, m.c) + " to " + to;
+}
+
+function render(marks) {
+  boardEl.innerHTML = "";
+  const last = new Set(marks || []);
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const sq = document.createElement("div");
+      sq.className = "sq " + ((r + c) % 2 === 0 ? "light" : "dark");
+      const name = sqName(r, c);
+      if (selected && selected[0] === r && selected[1] === c) sq.classList.add("selected");
+      if (last.has(name)) sq.classList.add("last");
+      const hit = legal.find(m => m.tr === r && m.tc === c);
+      if (hit) sq.classList.add(hit.capture ? "cap" : "dot");
+      const p = grid[r][c];
+      if (p) {
+        const span = document.createElement("span");
+        span.className = colorOf(p) === "w" ? "white-piece" : "black-piece";
+        span.textContent = GLYPH[p];
+        sq.appendChild(span);
+      }
+      sq.onclick = () => onSquare(r, c);
+      boardEl.appendChild(sq);
+    }
+  }
+}
+
+function onSquare(r, c) {
+  if (locked) return;
+  const p = grid[r][c];
+  const hit = legal.find(m => m.tr === r && m.tc === c);
+  if (hit) {
+    const piece = grid[hit.r][hit.c];
+    const promoRank = colorOf(piece) === "w" ? 0 : 7;
+    if (piece.toUpperCase() === "P" && hit.tr === promoRank) {
+      pending = hit;
+      document.getElementById("promo").classList.remove("hidden");
+      return;
+    }
+    commit(hit);
+    return;
+  }
+  if (p && colorOf(p) === "w") {
+    selected = [r, c];
+    legal = legalMovesFrom(grid, r, c);
+    render();
+    document.getElementById("turnLabel").textContent = legal.length
+      ? "Selected " + NAMES[p] + " on " + sqName(r, c) + " — click a marked square"
+      : "That piece has no legal move";
+  } else {
+    selected = null;
+    legal = [];
+    render();
+  }
+}
+
+function commit(move) {
+  const text = pretty(move);
+  const key = moveKey(move);
+  grid = applyMove(grid, move);
+  selected = null;
+  legal = [];
+  locked = true;
+  const puzzle = ROUNDS[round];
+  const hit = puzzle.answers[key];
+  const result = hit || puzzle.fallback;
+  const gained = Math.max(-10, Math.min(10, result.score));
+  score += gained;
+  document.getElementById("scoreLabel").textContent = score;
+  const cls = gained >= 7 ? "score-good" : gained < 0 ? "score-bad" : "score-mid";
+  const why = (hit ? result.note : result.note + " Best was " + puzzle.best + ".");
+  document.getElementById("feedback").innerHTML =
+    "<h3 class='" + cls + "'>" + (gained > 0 ? "+" : "") + gained + " relic points</h3>" +
+    "<p><b>Your move:</b> " + text + ".</p><p>" + why + "</p>";
+  render([sqName(move.r, move.c), sqName(move.tr, move.tc)]);
+  log.push({ name: puzzle.name, move: text, gained, best: puzzle.best });
+  document.getElementById("skip").classList.add("hidden");
+  document.getElementById("next").classList.remove("hidden");
+  document.getElementById("next").textContent = round === 9 ? "Leave the temple" : "Next puzzle";
+  document.getElementById("turnLabel").textContent = "Move played. Read the score, then continue.";
+}
+
+document.querySelectorAll("#promo button").forEach(btn => {
+  btn.onclick = () => {
+    document.getElementById("promo").classList.add("hidden");
+    if (!pending) return;
+    const m = Object.assign({}, pending, { promo: btn.dataset.p });
+    pending = null;
+    commit(m);
+  };
+});
+
+function showRound() {
+  const puzzle = ROUNDS[round];
+  locked = false;
+  selected = null;
+  legal = [];
+  pending = null;
+  grid = cloneBoard(puzzle.board);
+  document.getElementById("roundLabel").textContent = (round + 1) + " / 10";
+  document.getElementById("scoreLabel").textContent = score;
+  document.getElementById("chamberName").textContent = "Chamber " + (round + 1) + " · " + puzzle.name;
+  document.getElementById("story").textContent = puzzle.story;
+  document.getElementById("turnLabel").textContent = "You play White — click a light piece";
+  document.getElementById("feedback").innerHTML = "<h3>The idol is watching…</h3><p>Click one of your pieces, then click a highlighted square.</p>";
+  document.getElementById("next").classList.add("hidden");
+  document.getElementById("skip").classList.remove("hidden");
+  document.getElementById("promo").classList.add("hidden");
+  render();
+}
+
+document.getElementById("begin").onclick = () => {
+  document.getElementById("start").classList.add("hidden");
+  document.getElementById("game").classList.remove("hidden");
+  round = 0; score = 0; log = [];
+  showRound();
+};
+document.getElementById("skip").onclick = () => {
+  if (locked) return;
+  locked = true;
+  const puzzle = ROUNDS[round];
+  score -= 3;
+  document.getElementById("scoreLabel").textContent = score;
+  document.getElementById("feedback").innerHTML =
+    "<h3 class='score-bad'>−3 relic points</h3><p>You dodge the chamber. Best was " + puzzle.best + ".</p>";
+  log.push({ name: puzzle.name, move: "(skip)", gained: -3, best: puzzle.best });
+  document.getElementById("skip").classList.add("hidden");
+  document.getElementById("next").classList.remove("hidden");
+  document.getElementById("next").textContent = round === 9 ? "Leave the temple" : "Next puzzle";
+};
+document.getElementById("next").onclick = () => {
+  if (round >= 9) finish();
+  else { round += 1; showRound(); }
+};
+function finish() {
+  document.getElementById("game").classList.add("hidden");
+  document.getElementById("end").classList.remove("hidden");
+  let title, rank, idol, copy;
+  if (score >= 80) { title = "The idol is yours"; rank = "Fortune and Glory"; idol = "🏆"; copy = "You read the temple floor like a map. Dr. Jones would tip his hat."; }
+  else if (score >= 50) { title = "You escaped with gold"; rank = "Relic Hunter"; idol = "💰"; copy = "A few traps nicked you, but the bag is heavy with treasure."; }
+  else if (score >= 20) { title = "Dusty but alive"; rank = "Junior Explorer"; idol = "🧭"; copy = "You found the exit. Next raid, look for checks, forks, and free pieces."; }
+  else { title = "The spikes almost won"; rank = "Museum Tourist"; idol = "🐍"; copy = "The temple kept the idol. Castle when the king is in the center, and grab hanging pieces."; }
+  document.getElementById("endTitle").textContent = title;
+  document.getElementById("rank").textContent = rank;
+  document.getElementById("endIdol").textContent = idol;
+  document.getElementById("endCopy").textContent = copy;
+  document.getElementById("finalScore").textContent = "Final relic score: " + score + " / 100";
+  document.getElementById("recap").innerHTML = log.map(item =>
+    "<div class='recap-item'><b>" + item.name + "</b> — " + item.move +
+    " (" + (item.gained > 0 ? "+" : "") + item.gained + "). Best: " + item.best + "</div>"
+  ).join("");
+}
+document.getElementById("again").onclick = () => {
+  document.getElementById("end").classList.add("hidden");
+  document.getElementById("start").classList.remove("hidden");
+};
+</script>
+</body>
+</html>
