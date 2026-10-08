@@ -13,5 +13,5 @@ window.GAMES = [
   { slug: "six-seven",                   title: "Six Seven",                     maker: "Ben",     shot: "shots/six-seven.webp" },
   { slug: "tank-duel",                   title: "Tank Duel",                     maker: "Bro Talbot", shot: "shots/tank-duel.webp" },
   { slug: "pixel-knight-coin-quest",     title: "Pixel Knight Coin Quest",       maker: "Ryan", shot: "shots/pixel-knight-coin-quest.webp" },
-  { slug: "pathwatch",                   title: "Pathwatch: Cybernetic Citadel", maker: "Drew", shot: "shots/pathwatch.webp" }
+  { slug: "pathwatch",                   title: "Cybernetic Citadel",           maker: "Drew", shot: "shots/pathwatch.webp" }
 ];
